@@ -11,17 +11,22 @@ class BaseballModel(nn.Module):
         self.embedding_team = nn.Embedding(num_teams, embedding_dim)
         self.embedding_bat = nn.Embedding(num_bats, embedding_dim)
 
-        self.representation_layers = [nn.Linear(7 * embedding_dim + 3, hidden_dim), nn.ReLU()]
+        self.representation_layers = [
+            nn.Linear(7 * embedding_dim + 3, hidden_dim), nn.ReLU()]
         for _ in range(num_hidden_layers):
-            self.representation_layers += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
+            self.representation_layers += [
+                nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
         self.representation_layers.append(nn.Linear(hidden_dim, embedding_dim))
 
-        self.dynamics_layers = [nn.Linear(2 * embedding_dim, hidden_dim), nn.ReLU()]
+        self.dynamics_layers = [
+            nn.Linear(2 * embedding_dim, hidden_dim), nn.ReLU()]
         for _ in range(num_hidden_layers):
-            self.dynamics_layers += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
+            self.dynamics_layers += [nn.Linear(hidden_dim,
+                                               hidden_dim), nn.ReLU()]
         self.dynamics_layers.append(nn.Linear(hidden_dim, embedding_dim + 2))
 
-        self.value_layers = [nn.Linear(2 * embedding_dim, hidden_dim), nn.ReLU()]
+        self.value_layers = [
+            nn.Linear(2 * embedding_dim, hidden_dim), nn.ReLU()]
         for _ in range(num_hidden_layers):
             self.value_layers += [nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
         self.value_layers.append(nn.Linear(hidden_dim, 1))
@@ -61,4 +66,4 @@ class BaseballModel(nn.Module):
         x = torch.cat((embedding_bat, state), 1)
         for layer in self.value_layers:
             x = layer(x)
-        return x
+        return x.squeeze()
