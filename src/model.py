@@ -12,7 +12,7 @@ class BaseballModel(nn.Module):
         self.embedding_bat = nn.Embedding(num_bats, embedding_dim)
 
         self.representation_layers = [
-            nn.Linear(7 * embedding_dim + 3, hidden_dim), nn.ReLU()]
+            nn.Linear(7 * embedding_dim + 4, hidden_dim), nn.ReLU()]
         for _ in range(num_hidden_layers):
             self.representation_layers += [
                 nn.Linear(hidden_dim, hidden_dim), nn.ReLU()]
@@ -34,7 +34,7 @@ class BaseballModel(nn.Module):
     # START_BATS_IDS = torch.long(BATCH_SIZE, 9)
     # START_PIT_ID, FLD_TEAM_ID, BAT_LINEUP_ID, BASE1_RUN_ID, BASE2_RUN_ID, BASE3_RUN_ID = torch.long(BATCH_SIZE, )
     # OUTS_CT, INN_CT, START_BAT_SCORE_CT = torch.float(BATCH_SIZE, )
-    def representation(self, START_PIT_ID, FLD_TEAM_ID, BAT_LINEUP_ID, START_BATS_IDS, BASE1_RUN_ID, BASE2_RUN_ID, BASE3_RUN_ID, OUTS_CT, INN_CT, START_BAT_SCORE_CT):
+    def representation(self, START_PIT_ID, FLD_TEAM_ID, BAT_LINEUP_ID, START_BATS_IDS, BASE1_RUN_ID, BASE2_RUN_ID, BASE3_RUN_ID, OUTS_CT, INN_CT, START_FLD_SCORE_CT, START_BAT_SCORE_CT):
         embedding_start_pit = self.embedding_pit(START_PIT_ID)
         embedding_fld_team = self.embedding_team(FLD_TEAM_ID)
         embedding_bat = self.embedding_bat(
@@ -44,7 +44,7 @@ class BaseballModel(nn.Module):
         embedding_base2 = self.embedding_bat(BASE2_RUN_ID)
         embedding_base3 = self.embedding_bat(BASE3_RUN_ID)
         x = torch.cat((embedding_start_pit, embedding_fld_team, embedding_bat, embedding_start_bats, embedding_base1,
-                       embedding_base2, embedding_base3, OUTS_CT.unsqueeze(1), INN_CT.unsqueeze(1), START_BAT_SCORE_CT.unsqueeze(1)), 1)
+                       embedding_base2, embedding_base3, OUTS_CT.unsqueeze(1), INN_CT.unsqueeze(1), START_FLD_SCORE_CT.unsqueeze(1), START_BAT_SCORE_CT.unsqueeze(1)), 1)
         for layer in self.representation_layers:
             x = layer(x)
         return x  # (BATCH_SIZE, embedding_dim)
