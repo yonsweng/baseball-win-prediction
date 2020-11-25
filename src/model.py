@@ -66,4 +66,4 @@ class BaseballModel(nn.Module):
         x = torch.cat((embedding_bat, state), 1)
         for layer in self.value_layers:
             x = layer(x)
-        return x.squeeze()
+        return x.squeeze()  # (BATCH_SIZE, )
