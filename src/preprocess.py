@@ -34,7 +34,7 @@ def preprocess(data):
     data = data[data['BAT_EVENT_FL'] == 'T'].reset_index(drop=True)
 
     data['INN_END_FL'] = (data['OUTS_CT'] + data['EVENT_OUTS_CT'] == 3) \
-                         | data['GAME_END_FL']
+                         | (data['GAME_END_FL'] == 'T')
 
     # Encode teams.
     data['HOME_TEAM_ID'] = data['GAME_ID'].apply(lambda x: x[:3])

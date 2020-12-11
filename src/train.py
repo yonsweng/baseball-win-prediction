@@ -39,5 +39,6 @@ start_obs, end_obs, info, targets = dataiter.next()
 
 net = BaseballModel(num_bats, num_pits, num_teams, 256)
 
-writer.add_graph(net, start_obs)
+# writer.add_graph(net, list(start_obs.values()))
+writer.add_graph(net.representation, list(start_obs.values()))
 writer.close()

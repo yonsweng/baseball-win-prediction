@@ -8,8 +8,26 @@ class BaseballModel(nn.Module):
     def __init__(self, num_bats, num_pits, num_teams, embedding_dim):
         super().__init__()
 
-    def forward(self, x):
-        return x
+    def representation(self):
+        return
+
+    def forward(self,
+            state,
+            start_pit,
+            fld_team,
+            pit_lineup,
+            bat,
+            bat_next1,
+            bat_next2,
+            bat_next3,
+            bat_next4,
+            bat_next5,
+            bat_next6,
+            bat_next7,
+            bat_next8,
+            bat_next9):
+        pit = (1 - pit_lineup) * start_pit + pit_lineup * fld_team
+        return pit
 
     #     self.representation_layers = [
     #         nn.Linear(7 * embedding_dim + 5, hidden_dim), nn.ReLU()]
