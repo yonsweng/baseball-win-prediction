@@ -1,33 +1,182 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
 
 
-class BaseballModel(nn.Module):
+class Model(nn.Module):
+    '''
+    Baseball model
+    '''
     def __init__(self, num_bats, num_pits, num_teams, embedding_dim):
         super().__init__()
 
-    def representation(self):
-        return
+        # Layer parameters
+        self.embedding_dim = embedding_dim
+        hidden_dim = 64
+        small_embedding_dim = 4
+
+        # Embedding layers
+        self.bat_emb = nn.Embedding(num_bats, self.embedding_dim, 0)
+        self.pit_emb = nn.Embedding(num_pits, self.embedding_dim)
+        self.team_emb = nn.Embedding(num_teams, self.embedding_dim)
+
+        # State layers
+        self.base_run_model = nn.Sequential(
+            nn.Linear(self.embedding_dim * 3, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, small_embedding_dim)
+        )
+        self.pa_state_model = nn.Sequential(
+            nn.Linear(small_embedding_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, self.embedding_dim)
+        )
+        self.game_state_model = nn.Sequential(
+            nn.Linear(4, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, self.embedding_dim)
+        )
+
+        # PA model
+        self.pa_model = nn.Sequential(
+            nn.Linear(5 * self.embedding_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU()
+        )
+        self.inn_end_model = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1)
+        )
+        self.reward_model = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1)
+        )
+        self.next_pa_state_model = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, self.embedding_dim)
+        )
+
+        # Game model
+        self.situation_model = nn.Sequential(
+            nn.Linear(4 * hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, small_embedding_dim)
+        )
+        self.bat_model = nn.Sequential(
+            nn.Linear(9 * self.embedding_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, small_embedding_dim)
+        )
+        self.game_model = nn.Sequential(
+            nn.Linear(2 * small_embedding_dim + 1, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU()
+        )
+        self.pit_lineup_model = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1)
+        )
+        self.value_game = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1)
+        )
+        self.value_away = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1)
+        )
+        self.value_home = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1)
+        )
+
+    def get_pa_state(self,
+            outs_ct,
+            base1_run_id,
+            base2_run_id,
+            base3_run_id):
+        '''
+        Returns:
+            pa_state
+        '''
+        base1_run = self.bat_emb(base1_run_id)
+        base2_run = self.bat_emb(base2_run_id)
+        base3_run = self.bat_emb(base3_run_id)
+
+        base_run_in = torch.cat([base1_run, base2_run, base3_run], dim=1)
+        base_run_out = self.base_run_model(base_run_in)
+
+        pa_state_input = torch.cat([outs_ct, base_run_out], dim=1)
+        pa_state = self.pa_state_model(pa_state_input)
+
+        return pa_state
 
     def forward(self,
-            state,
-            start_pit,
-            fld_team,
+            start_pit_id,
+            fld_team_id,
+            pa_state,
+            away_score_ct,
+            home_score_ct,
+            inn_ct,
+            bat_home_id,
             pit_lineup,
-            bat,
-            bat_next1,
-            bat_next2,
-            bat_next3,
-            bat_next4,
-            bat_next5,
-            bat_next6,
-            bat_next7,
-            bat_next8,
-            bat_next9):
+            bat_this_id,
+            bat_next_ids):
+        '''
+        Returns:
+            inn_end_fl,
+            reward,
+            next_pa_state,
+            pit_lineup,
+            value_game,
+            value_away,
+            value_home
+        '''
+        # Get a game state
+        game_state_in = torch.cat([away_score_ct.unsqueeze(1),
+                                   home_score_ct.unsqueeze(1),
+                                   inn_ct.unsqueeze(1),
+                                   bat_home_id.unsqueeze(1)], dim=1)
+        game_state = self.game_state_model(game_state_in)
+
+        # Get a pitcher's embedding
+        start_pit = self.pit_emb(start_pit_id)
+        fld_team = self.team_emb(fld_team_id)
         pit = (1 - pit_lineup) * start_pit + pit_lineup * fld_team
-        return pit
+
+        # Get an inn_end_fl, a reward and a PA state
+        pa_in = torch.cat([pit, fld_team, pa_state, game_state], dim=1)
+        pa = self.pa_model(pa_in)
+        inn_end_fl = self.inn_end_model(pa)
+        reward = self.reward_model(pa)
+        next_pa_state = self.next_pa_state_model(pa)
+
+        # Get a batters' embedding
+        bat_this = self.bat_emb(bat_this_id)
+        bat_next = self.bat_emb(bat_next_ids)  # (batch_size, 8, embedding_dim)
+        bat_in = torch.cat([bat_this.unsqueeze(1), bat_next], dim=1).reshape(-1, 9 * self.embedding_dim)
+        bat = self.bat_model(bat_in)
+
+        # Situation embedding
+        situation_in = torch.cat([start_pit, fld_team, pa_state, game_state], dim=1)
+        situation = self.situation_model(situation_in)
+
+        # Get a next pit_lineup, value_game, value_away and value_home
+        game_in = torch.cat([situation, bat, pit_lineup.unsqueeze(1)], dim=1)
+        game = self.game_model(game_in)
+        pit_lineup = self.pit_lineup_model(game)
+        value_game = self.value_game_model(game)
+        value_away = self.value_away_model(game)
+        value_home = self.value_home_model(game)
+
+        return inn_end_fl, reward, next_pa_state, pit_lineup, value_game, value_away, value_home
 
     #     self.representation_layers = [
     #         nn.Linear(7 * embedding_dim + 5, hidden_dim), nn.ReLU()]

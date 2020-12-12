@@ -52,8 +52,7 @@ class BaseballDataset(Dataset):
             'inn_end_fl': torch.Tensor(data['INN_END_FL'].values),
             'reward': torch.Tensor((data['END_AWAY_SCORE_CT'] - data['AWAY_SCORE_CT']).where(
                 data['BAT_HOME_ID'] == 0, data['END_HOME_SCORE_CT'] - data['HOME_SCORE_CT']).values),
-            'value': torch.Tensor((data['FINAL_AWAY_SCORE_CT'] - data['AWAY_SCORE_CT']).where(
-                data['BAT_HOME_ID'] == 0, data['FINAL_HOME_SCORE_CT'] - data['HOME_SCORE_CT']).values)
+            'value': torch.Tensor((data['FINAL_AWAY_SCORE_CT'] < data['FINAL_HOME_SCORE_CT']).values)
         }
 
         return start_obs, end_obs, info, targets

@@ -15,6 +15,7 @@ diff_cols = [
     'HOME_SCORE_CT'
 ]
 used_cols = [
+    'GAME_ID',
     'AWAY_TEAM_ID',
     'HOME_TEAM_ID',
     'GAME_END_FL',
