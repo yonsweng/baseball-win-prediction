@@ -11,7 +11,7 @@ class BaseballDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        idx = [idx] if isinstance(idx, int) else idx
+        # idx = [idx] if isinstance(idx, int) else idx
         data = self.data.iloc[idx, :]
 
         start_obs = {
@@ -52,7 +52,10 @@ class BaseballDataset(Dataset):
             'inn_end_fl': torch.Tensor(data['INN_END_FL'].values),
             'reward': torch.Tensor((data['END_AWAY_SCORE_CT'] - data['AWAY_SCORE_CT']).where(
                 data['BAT_HOME_ID'] == 0, data['END_HOME_SCORE_CT'] - data['HOME_SCORE_CT']).values),
-            'value': torch.Tensor((data['FINAL_AWAY_SCORE_CT'] < data['FINAL_HOME_SCORE_CT']).values)
+            'value_game': torch.Tensor(np.where(data['AWAY_SCORE_CT'] == data['HOME_SCORE_CT'], 0.5,
+                                                data['AWAY_SCORE_CT'] < data['HOME_SCORE_CT'])),
+            'value_away': torch.Tensor((data['FINAL_AWAY_SCORE_CT'] - data['AWAY_SCORE_CT']).values),
+            'value_home': torch.Tensor((data['FINAL_HOME_SCORE_CT'] - data['HOME_SCORE_CT']).values)
         }
 
         return start_obs, end_obs, info, targets
