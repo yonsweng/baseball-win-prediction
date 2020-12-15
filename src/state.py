@@ -1,4 +1,6 @@
+''' GameState '''
 class GameState():
+    ''' GameState '''
     def __init__(self):
         self.inn_ct = 1
         self.bat_home_id = 0
@@ -7,6 +9,13 @@ class GameState():
         self.done = False
 
     def step(self, inn_end, away_score_ct, home_score_ct):
+        '''
+        Returns:
+            inn_ct,
+            bat_home_id,
+            bat_lineup,
+            done
+        '''
         if inn_end:
             self.inn_end(away_score_ct, home_score_ct)
 
@@ -27,6 +36,10 @@ class GameState():
                self.done
 
     def inn_end(self, away_score_ct, home_score_ct):
+        '''
+        Return:
+            None
+        '''
         if self.bat_home_id == 0:
             self.bat_home_id = 1
             if self.inn_ct >= 9 and away_score_ct < home_score_ct:

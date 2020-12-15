@@ -1,3 +1,4 @@
+''' Preprocess '''
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import OrdinalEncoder
@@ -18,6 +19,7 @@ used_cols = [
     'GAME_ID',
     'AWAY_TEAM_ID',
     'HOME_TEAM_ID',
+    'GAME_NEW_FL',
     'GAME_END_FL',
     'AWAY_START_PIT_ID',
     'HOME_START_PIT_ID',
@@ -31,6 +33,10 @@ used_cols = [
 
 
 def preprocess(data):
+    '''
+    Returns:
+        data
+    '''
     # Use only PA data.
     data = data[data['BAT_EVENT_FL'] == 'T'].reset_index(drop=True)
 
@@ -42,19 +48,25 @@ def preprocess(data):
     team_encoder = OrdinalEncoder()
     team_encoder.categories_ = \
         np.unique(data[['AWAY_TEAM_ID', 'HOME_TEAM_ID']].values.reshape(-1)).reshape(1, -1)
-    data['AWAY_TEAM_ID'] = team_encoder.transform(data['AWAY_TEAM_ID'].values.reshape(-1, 1)).astype(int)
-    data['HOME_TEAM_ID'] = team_encoder.transform(data['HOME_TEAM_ID'].values.reshape(-1, 1)).astype(int)
+    data['AWAY_TEAM_ID'] = \
+        team_encoder.transform(data['AWAY_TEAM_ID'].values.reshape(-1, 1)).astype(int)
+    data['HOME_TEAM_ID'] = \
+        team_encoder.transform(data['HOME_TEAM_ID'].values.reshape(-1, 1)).astype(int)
 
     # Encode batters.
     data[['BAT_ID', 'BASE1_RUN_ID', 'BASE2_RUN_ID', 'BASE3_RUN_ID']] = \
         data[['BAT_ID', 'BASE1_RUN_ID', 'BASE2_RUN_ID', 'BASE3_RUN_ID']].fillna('')
     bat_encoder = OrdinalEncoder()
     bat_encoder.categories_ = \
-        np.unique(data[['BAT_ID', 'BASE1_RUN_ID', 'BASE2_RUN_ID', 'BASE3_RUN_ID']].values.reshape(-1)).reshape(1, -1)
+        np.unique(data[['BAT_ID', 'BASE1_RUN_ID', 'BASE2_RUN_ID', 'BASE3_RUN_ID']].values
+            .reshape(-1)).reshape(1, -1)
     data['BAT_ID'] = bat_encoder.transform(data['BAT_ID'].values.reshape(-1, 1)).astype(int)
-    data['BASE1_RUN_ID'] = bat_encoder.transform(data['BASE1_RUN_ID'].values.reshape(-1, 1)).astype(int)
-    data['BASE2_RUN_ID'] = bat_encoder.transform(data['BASE2_RUN_ID'].values.reshape(-1, 1)).astype(int)
-    data['BASE3_RUN_ID'] = bat_encoder.transform(data['BASE3_RUN_ID'].values.reshape(-1, 1)).astype(int)
+    data['BASE1_RUN_ID'] = bat_encoder.transform(data['BASE1_RUN_ID'].values.reshape(-1, 1))\
+        .astype(int)
+    data['BASE2_RUN_ID'] = bat_encoder.transform(data['BASE2_RUN_ID'].values.reshape(-1, 1))\
+        .astype(int)
+    data['BASE3_RUN_ID'] = bat_encoder.transform(data['BASE3_RUN_ID'].values.reshape(-1, 1))\
+        .astype(int)
 
     # Encode pitchers.
     pit_encoder = OrdinalEncoder()
@@ -62,7 +74,8 @@ def preprocess(data):
 
     # Runs scored on the events.
     data['EVENT_RUNS_CT'] = \
-        (data[['BAT_DEST_ID', 'RUN1_DEST_ID', 'RUN2_DEST_ID', 'RUN3_DEST_ID']] >= 4).apply(lambda x: sum(x), axis=1)
+        (data[['BAT_DEST_ID', 'RUN1_DEST_ID', 'RUN2_DEST_ID', 'RUN3_DEST_ID']] >= 4).apply(sum,
+        axis=1)
 
     # Save starting batters and pitchers' IDs of games.
     games = [game for _, game in data.groupby(data['GAME_ID'])]
@@ -91,7 +104,8 @@ def preprocess(data):
         else:
             last_pa.iloc[0]['HOME_SCORE_CT'] += last_pa.iloc[0]['EVENT_RUNS_CT']
 
-        end_df = pd.concat([game.iloc[1:][diff_cols + ['EVENT_RUNS_CT']], last_pa], ignore_index=True)
+        end_df = pd.concat([game.iloc[1:][diff_cols + ['EVENT_RUNS_CT']], last_pa],
+            ignore_index=True)
         end_df.rename(columns={col: 'END_' + col for col in diff_cols}, inplace=True)
         game.reset_index(inplace=True, drop=True)
         end_df.reset_index(inplace=True, drop=True)

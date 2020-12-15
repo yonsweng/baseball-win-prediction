@@ -1,3 +1,7 @@
+'''
+Model
+'''
+
 import torch
 import torch.nn as nn
 
@@ -19,76 +23,84 @@ class Model(nn.Module):
         self.pit_emb = nn.Embedding(num_pits, self.embedding_dim)
         self.team_emb = nn.Embedding(num_teams, self.embedding_dim)
 
+        # Compress model
+        self.compress = nn.Sequential(
+            nn.Linear(9 * self.embedding_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU()
+        )
+
         # State layers
-        self.base_run_model = nn.Sequential(
-            nn.Conv1d(in_channels=3, out_channels=1, kernel_size=1),
-            nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(1 * self.embedding_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, small_embedding_dim)
-        )
-        self.state_model = nn.Sequential(
-            nn.Linear(small_embedding_dim + 6, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, self.embedding_dim)
-        )
+        # self.base_run_model = nn.Sequential(
+        #     nn.Conv1d(in_channels=3, out_channels=1, kernel_size=1),
+        #     nn.ReLU(),
+        #     nn.Flatten(),
+        #     nn.Linear(1 * self.embedding_dim, hidden_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_dim, small_embedding_dim)
+        # )
+        # self.state_model = nn.Sequential(
+        #     nn.Linear(small_embedding_dim + 6, hidden_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_dim, self.embedding_dim)
+        # )
 
-        # Event model
-        self.event_model = nn.Sequential(
-            nn.Linear(4 * self.embedding_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU()
-        )
-        self.reward_model = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1)
-        )
-        self.inn_end_model = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1),
-            nn.Sigmoid()
-        )
-        self.next_state_model = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, self.embedding_dim)
-        )
+        # # Event model
+        # self.event_model = nn.Sequential(
+        #     nn.Linear(4 * self.embedding_dim, hidden_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.ReLU()
+        # )
+        # self.reward_model = nn.Sequential(
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_dim, 1)
+        # )
+        # self.inn_end_model = nn.Sequential(
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_dim, 1),
+        #     nn.Sigmoid()
+        # )
+        # self.next_state_model = nn.Sequential(
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_dim, self.embedding_dim)
+        # )
 
-        # Value model
-        self.bat_model = nn.Sequential(
-            nn.Conv1d(in_channels=9, out_channels=1, kernel_size=1),
-            nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(1 * self.embedding_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, self.embedding_dim)
-        )
-        self.value_model = nn.Sequential(
-            nn.Linear(4 * self.embedding_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU()
-        )
-        self.value_game_model = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1),
-            nn.Sigmoid()
-        )
-        self.value_away_model = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1)
-        )
-        self.value_home_model = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1)
-        )
+        # # Value model
+        # self.bat_model = nn.Sequential(
+        #     nn.Conv1d(in_channels=9, out_channels=1, kernel_size=1),
+        #     nn.ReLU(),
+        #     nn.Flatten(),
+        #     nn.Linear(1 * self.embedding_dim, hidden_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_dim, self.embedding_dim)
+        # )
+        # self.value_model = nn.Sequential(
+        #     nn.Linear(4 * self.embedding_dim, hidden_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.ReLU()
+        # )
+        # self.value_game_model = nn.Sequential(
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_dim, 1),
+        #     nn.Sigmoid()
+        # )
+        # self.value_away_model = nn.Sequential(
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_dim, 1)
+        # )
+        # self.value_home_model = nn.Sequential(
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_dim, 1)
+        # )
 
     def get_state(self,
             away_score_ct,

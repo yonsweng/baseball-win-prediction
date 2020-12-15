@@ -1,9 +1,14 @@
+'''
+Dataset
+'''
 import torch
 from torch.utils.data import Dataset
-import numpy as np
 
 
 class BaseballDataset(Dataset):
+    '''
+    BaseballDataset
+    '''
     def __init__(self, data):
         self.data = data
 
@@ -49,8 +54,9 @@ class BaseballDataset(Dataset):
         }
         targets = {
             'inn_end_fl': torch.Tensor([data['INN_END_FL']]),
-            'reward': torch.Tensor([data['END_AWAY_SCORE_CT'] - data['AWAY_SCORE_CT'] if data['BAT_HOME_ID'] == 0
-                               else data['END_HOME_SCORE_CT'] - data['HOME_SCORE_CT']]),
+            'reward': torch.Tensor([data['END_AWAY_SCORE_CT'] - data['AWAY_SCORE_CT']
+                                   if data['BAT_HOME_ID'] == 0
+                                   else data['END_HOME_SCORE_CT'] - data['HOME_SCORE_CT']]),
             'value_game': torch.Tensor([0.5 if data['AWAY_SCORE_CT'] == data['HOME_SCORE_CT']
                                     else float(data['AWAY_SCORE_CT'] < data['HOME_SCORE_CT'])]),
             'value_away': torch.Tensor([data['FINAL_AWAY_SCORE_CT'] - data['AWAY_SCORE_CT']]),
