@@ -44,9 +44,7 @@ def tensorboard():
         home_score_ct=start_obs['home_score_ct'].to(device)
     )
 
-    writer = SummaryWriter('runs/baseball')
-    writer.add_graph(model, [static_state, dynamic_state])
-    writer.close()
+    tb.add_graph(model, [static_state, dynamic_state])
 
 
 def count_numbers(tmp):
@@ -164,6 +162,9 @@ def train():
         for key in training_losses:
             print(f'training {key} loss: {sum(training_losses[key]) / data_size}')
 
+            # For TensorBoard
+            tb.add_scalar(f'training {key} loss', sum(training_losses[key]) / data_size, epoch)
+
         # Validation
         model.eval()
         data_size = 0
@@ -233,6 +234,13 @@ def train():
         for key in validation_losses:
             print(f'validation {key} loss: {sum(validation_losses[key]) / data_size}')
 
+            # For TensorBoard
+            tb.add_scalar(f'validation {key} loss', sum(validation_losses[key]) / data_size, epoch)
+
+        # Draw histograms for model weights
+        tb.add_histogram('bat_emb', model.bat_emb.weight, epoch)
+        tb.add_histogram('pit_emb', model.pit_emb.weight, epoch)
+        tb.add_histogram('team_emb', model.team_emb.weight, epoch)
 
 if __name__ == "__main__":
     # Get arguments
@@ -295,5 +303,10 @@ if __name__ == "__main__":
     MSELoss = torch.nn.MSELoss()
     BCELoss = torch.nn.BCELoss()
 
-    # tensorboard()
+    # For TensorBoard
+    tb = SummaryWriter()
+
+    tensorboard()
     train()
+
+    tb.close()
