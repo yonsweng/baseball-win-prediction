@@ -249,8 +249,8 @@ if __name__ == "__main__":
                         help='learning rate for training (default: 1e-6)')
     parser.add_argument('--embedding-dim', type=int, default=256, metavar='N',
                         help='embedding dimension (default: 256)')
-    parser.add_argument('--dropout', type=float, default=0.3, metavar='F',
-                        help='dropout rate (default: 0.3)')
+    parser.add_argument('--dropout', type=float, default=0.0, metavar='F',
+                        help='dropout rate (default: 0.0)')
     parser.add_argument('--batch-size', type=int, default=512, metavar='N',
                         help='input batch size for training (default: 512)')
     parser.add_argument('--epochs', type=int, default=100, metavar='N',
