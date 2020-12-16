@@ -4,26 +4,27 @@ import numpy as np
 from sklearn.preprocessing import OrdinalEncoder
 
 diff_cols = [
-    'INN_CT',
-    'BAT_HOME_ID',
-    'OUTS_CT',
     'BASE1_RUN_ID',
     'BASE2_RUN_ID',
     'BASE3_RUN_ID',
-    'BAT_LINEUP_ID',
-    'PIT_LINEUP_ID',
+    'AWAY_BAT_LINEUP_ID',
+    'HOME_BAT_LINEUP_ID',
+    'AWAY_PIT_LINEUP_ID',
+    'HOME_PIT_LINEUP_ID',
+    'BAT_HOME_ID',
+    'INN_CT',
+    'OUTS_CT',
     'AWAY_SCORE_CT',
     'HOME_SCORE_CT'
 ]
 used_cols = [
     'GAME_ID',
+    'AWAY_START_PIT_ID',
+    'HOME_START_PIT_ID',
     'AWAY_TEAM_ID',
     'HOME_TEAM_ID',
     'GAME_NEW_FL',
     'GAME_END_FL',
-    'AWAY_START_PIT_ID',
-    'HOME_START_PIT_ID',
-    'INN_END_FL',
     'FINAL_AWAY_SCORE_CT',
     'FINAL_HOME_SCORE_CT',
 ] + [f'AWAY_START_BAT{i}_ID' for i in range(1, 10)] \
@@ -40,8 +41,9 @@ def preprocess(data):
     # Use only PA data.
     data = data[data['BAT_EVENT_FL'] == 'T'].reset_index(drop=True)
 
-    data['INN_END_FL'] = (data['OUTS_CT'] + data['EVENT_OUTS_CT'] == 3) \
-                         | (data['GAME_END_FL'] == 'T')
+    # Object columns -> bool columns
+    data['GAME_NEW_FL'] = data['GAME_NEW_FL'] == 'T'
+    data['GAME_END_FL'] = data['GAME_END_FL'] == 'T'
 
     # Encode teams.
     data['HOME_TEAM_ID'] = data['GAME_ID'].apply(lambda x: x[:3])
@@ -98,6 +100,30 @@ def preprocess(data):
             ((game['PIT_ID'] != game['AWAY_START_PIT_ID']) & \
             (game['PIT_ID'] != game['HOME_START_PIT_ID'])).astype(int)
 
+        # away_bat_lineup, home_bat_lineup, away_pit_lineup, home_pit_lineup
+        bat_home_id = list(game['BAT_HOME_ID'].values)
+        bat_lineup_id = list(game['BAT_LINEUP_ID'].values)
+        pit_lineup_id = list(game['PIT_LINEUP_ID'].values)
+        away_bat_lineup = []
+        home_bat_lineup = []
+        away_pit_lineup = []
+        home_pit_lineup = []
+        for i, bat_home in enumerate(bat_home_id):
+            if bat_home == 0:  # Away bat
+                away_bat_lineup.append(bat_lineup_id[i])
+                home_bat_lineup.append(home_bat_lineup[i-1] if i > 0 else 1)
+                away_pit_lineup.append(away_pit_lineup[i-1] if i > 0 else 0)
+                home_pit_lineup.append(pit_lineup_id[i])
+            else:  # Home bat
+                home_bat_lineup.append(bat_lineup_id[i])
+                away_bat_lineup.append(away_bat_lineup[i-1] if i > 0 else 1)
+                home_pit_lineup.append(home_pit_lineup[i-1] if i > 0 else 0)
+                away_pit_lineup.append(pit_lineup_id[i])
+        game['AWAY_BAT_LINEUP_ID'] = away_bat_lineup
+        game['HOME_BAT_LINEUP_ID'] = home_bat_lineup
+        game['AWAY_PIT_LINEUP_ID'] = away_pit_lineup
+        game['HOME_PIT_LINEUP_ID'] = home_pit_lineup
+
         last_pa = game.iloc[-1:][diff_cols + ['EVENT_RUNS_CT']]
         if last_pa.iloc[0]['BAT_HOME_ID'] == 0:
             last_pa.iloc[0]['AWAY_SCORE_CT'] += last_pa.iloc[0]['EVENT_RUNS_CT']
@@ -120,9 +146,6 @@ def preprocess(data):
 
     data = pd.concat(new_games, ignore_index=False)
     data = data[used_cols]
-
-    # Transform types of the data.
-    data['GAME_END_FL'] = data['GAME_END_FL'] == 'T'
 
     print('Data preprocess done.')
     return data

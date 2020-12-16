@@ -1,180 +1,182 @@
 '''
-Model
+model.py
 '''
-
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 
 class Model(nn.Module):
     '''
-    Baseball model
+    Model
     '''
     def __init__(self, num_bats, num_pits, num_teams, embedding_dim):
         super().__init__()
 
         # Layer parameters
         self.embedding_dim = embedding_dim
-        hidden_dim = 64
-        small_embedding_dim = 8
 
         # Embedding layers
         self.bat_emb = nn.Embedding(num_bats, self.embedding_dim, 0)
         self.pit_emb = nn.Embedding(num_pits, self.embedding_dim)
         self.team_emb = nn.Embedding(num_teams, self.embedding_dim)
 
-        # Compress model
-        self.compress = nn.Sequential(
-            nn.Linear(9 * self.embedding_dim, hidden_dim),
+        self.static_representation = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(22 * self.embedding_dim, 4 * self.embedding_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(4 * self.embedding_dim, 2 * self.embedding_dim),
+            nn.ReLU(),
+            nn.Linear(2 * self.embedding_dim, self.embedding_dim)
+        )
+
+        self.compression = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(3 * self.embedding_dim, self.embedding_dim),
+            nn.ReLU(),
+            nn.Linear(self.embedding_dim, self.embedding_dim // 2),
+            nn.ReLU(),
+            nn.Linear(self.embedding_dim // 2, self.embedding_dim // 8),
             nn.ReLU()
         )
 
-        # State layers
-        # self.base_run_model = nn.Sequential(
-        #     nn.Conv1d(in_channels=3, out_channels=1, kernel_size=1),
-        #     nn.ReLU(),
-        #     nn.Flatten(),
-        #     nn.Linear(1 * self.embedding_dim, hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim, small_embedding_dim)
-        # )
-        # self.state_model = nn.Sequential(
-        #     nn.Linear(small_embedding_dim + 6, hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim, self.embedding_dim)
-        # )
+        self.dynamic_representation = nn.Sequential(
+            nn.Linear(self.embedding_dim // 8 + 25, 4 * self.embedding_dim),
+            nn.ReLU(),
+            nn.Linear(4 * self.embedding_dim, 2 * self.embedding_dim),
+            nn.ReLU(),
+            nn.Linear(2 * self.embedding_dim, self.embedding_dim)
+        )
 
-        # # Event model
-        # self.event_model = nn.Sequential(
-        #     nn.Linear(4 * self.embedding_dim, hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim, hidden_dim),
-        #     nn.ReLU()
-        # )
-        # self.reward_model = nn.Sequential(
-        #     nn.Linear(hidden_dim, hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim, 1)
-        # )
-        # self.inn_end_model = nn.Sequential(
-        #     nn.Linear(hidden_dim, hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim, 1),
-        #     nn.Sigmoid()
-        # )
-        # self.next_state_model = nn.Sequential(
-        #     nn.Linear(hidden_dim, hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim, self.embedding_dim)
-        # )
+        self.dynamics = nn.Sequential(
+            nn.Linear(2 * self.embedding_dim, 2 * self.embedding_dim),
+            nn.ReLU(),
+            nn.Linear(2 * self.embedding_dim, self.embedding_dim),
+            nn.ReLU(),
+            nn.Linear(self.embedding_dim, self.embedding_dim // 2),
+            nn.ReLU()
+        )
 
-        # # Value model
-        # self.bat_model = nn.Sequential(
-        #     nn.Conv1d(in_channels=9, out_channels=1, kernel_size=1),
-        #     nn.ReLU(),
-        #     nn.Flatten(),
-        #     nn.Linear(1 * self.embedding_dim, hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim, self.embedding_dim)
-        # )
-        # self.value_model = nn.Sequential(
-        #     nn.Linear(4 * self.embedding_dim, hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim, hidden_dim),
-        #     nn.ReLU()
-        # )
-        # self.value_game_model = nn.Sequential(
-        #     nn.Linear(hidden_dim, hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim, 1),
-        #     nn.Sigmoid()
-        # )
-        # self.value_away_model = nn.Sequential(
-        #     nn.Linear(hidden_dim, hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim, 1)
-        # )
-        # self.value_home_model = nn.Sequential(
-        #     nn.Linear(hidden_dim, hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim, 1)
-        # )
+        self.next_dynamic_state = nn.Sequential(
+            nn.Linear(self.embedding_dim // 2, 4 * self.embedding_dim),
+            nn.ReLU(),
+            nn.Linear(4 * self.embedding_dim, 2 * self.embedding_dim),
+            nn.ReLU(),
+            nn.Linear(2 * self.embedding_dim, self.embedding_dim)
+        )
 
-    def get_state(self,
-            away_score_ct,
-            home_score_ct,
-            inn_ct,
-            bat_home_id,
-            pit_lineup,
-            outs_ct,
-            base1_run_id,
-            base2_run_id,
-            base3_run_id):
+        self.reward = nn.Sequential(
+            nn.Linear(self.embedding_dim // 2, self.embedding_dim // 4),
+            nn.ReLU(),
+            nn.Linear(self.embedding_dim // 4, self.embedding_dim // 8),
+            nn.ReLU(),
+            nn.Linear(self.embedding_dim // 8, 1)
+        )
+
+        self.done = nn.Sequential(
+            nn.Linear(self.embedding_dim // 2, self.embedding_dim // 4),
+            nn.ReLU(),
+            nn.Linear(self.embedding_dim // 4, self.embedding_dim // 8),
+            nn.ReLU(),
+            nn.Linear(self.embedding_dim // 8, 1),
+            nn.Sigmoid()
+        )
+
+        self.prediction = nn.Sequential(
+            nn.Linear(2 * self.embedding_dim, self.embedding_dim),
+            nn.ReLU(),
+            nn.Linear(self.embedding_dim, self.embedding_dim // 2),
+            nn.ReLU(),
+            nn.Linear(self.embedding_dim // 2, 2)
+        )
+
+    def get_static_state(
+        self,
+        away_start_bat_ids,  # torch.long(batch_size, 9)
+        home_start_bat_ids,  # torch.long(batch_size, 9)
+        away_start_pit_id,  # torch.long(batch_size, 1)
+        home_start_pit_id,  # torch.long(batch_size, 1)
+        away_team_id,  # torch.long(batch_size, 1)
+        home_team_id  # torch.long(batch_size, 1)
+    ):
+        away_start_bats = self.bat_emb(away_start_bat_ids)  # (batch_size, 9, emb_dim)
+        home_start_bats = self.bat_emb(home_start_bat_ids)  # (batch_size, 9, emb_dim)
+        away_start_pit = self.pit_emb(away_start_pit_id)  # (batch_size, 1, emb_dim)
+        home_start_pit = self.pit_emb(home_start_pit_id)  # (batch_size, 1, emb_dim)
+        away_team = self.team_emb(away_team_id)  # (batch_size, 1, emb_dim)
+        home_team = self.team_emb(home_team_id)  # (batch_size, 1, emb_dim)
+        embeddings = torch.cat([away_start_bats,
+                                home_start_bats,
+                                away_start_pit,
+                                home_start_pit,
+                                away_team,
+                                home_team], dim=1)
+        static_state = self.static_representation(embeddings)
+        return static_state
+
+    def get_dynamic_state(
+        self,
+        base1_run_id,  # torch.long(batch_size, 1)
+        base2_run_id,  # torch.long(batch_size, 1)
+        base3_run_id,  # torch.long(batch_size, 1)
+        away_bat_lineup,  # torch.long(batch_size, 1)
+        home_bat_lineup,  # torch.long(batch_size, 1)
+        away_pit_lineup,  # torch.float(batch_size, 1)
+        home_pit_lineup,  # torch.float(batch_size, 1)
+        bat_home_id,  # torch.float(batch_size, 1)
+        inn_ct,  # torch.float(batch_size, 1)
+        outs_ct,  # torch.float(batch_size, 1)
+        away_score_ct,  # torch.float(batch_size, 1)
+        home_score_ct  # torch.float(batch_size, 1)
+    ):
         '''
         Returns:
             state
         '''
-        base1_run = self.bat_emb(base1_run_id)
-        base2_run = self.bat_emb(base2_run_id)
-        base3_run = self.bat_emb(base3_run_id)
+        base1_run = self.bat_emb(base1_run_id)  # (batch_size, 1, emb_dim)
+        base2_run = self.bat_emb(base2_run_id)  # (batch_size, 1, emb_dim)
+        base3_run = self.bat_emb(base3_run_id)  # (batch_size, 1, emb_dim)
+        away_bat_lineup_onehot = F.one_hot(away_bat_lineup - 1, num_classes=9).squeeze()
+        home_bat_lineup_onehot = F.one_hot(home_bat_lineup - 1, num_classes=9).squeeze()
 
-        # base_run_in = (batch_size, 3, embedding_dim)
-        base_run_in = torch.cat([base1_run, base2_run, base3_run], dim=1)
-        base_run = self.base_run_model(base_run_in)
+        compressed = self.compression(torch.cat([
+            base1_run,
+            base2_run,
+            base3_run
+        ], dim=1))
 
-        state_in = torch.cat([away_score_ct,
-                              home_score_ct,
-                              inn_ct,
-                              bat_home_id,
-                              pit_lineup,
-                              outs_ct,
-                              base_run], dim=1)
-        state = self.state_model(state_in)
+        representation_input = torch.cat([
+            compressed,
+            away_bat_lineup_onehot,
+            home_bat_lineup_onehot,
+            away_pit_lineup,
+            home_pit_lineup,
+            bat_home_id,
+            inn_ct,
+            outs_ct,
+            away_score_ct,
+            home_score_ct
+        ], dim=1)
 
+        state = self.dynamic_representation(representation_input)
         return state
 
-    def forward(self,
-            start_pit_id,
-            fld_team_id,
-            state,
-            bat_this_id,
-            bat_next_ids):
+    def forward(self, static_state, dynamic_state):
         '''
         Returns:
-            next_state,
+            next_dynamic_state,
             reward,
-            inn_end_fl,
-            value_game,
+            done,
             value_away,
             value_home
         '''
-        # Get embeddings
-        start_pit = self.pit_emb(start_pit_id)
-        fld_team = self.team_emb(fld_team_id)
-        bat_this = self.bat_emb(bat_this_id)
-        bat_next = self.bat_emb(bat_next_ids)  # (batch_size, 8, embedding_dim)
+        state = torch.cat([static_state, dynamic_state], dim=1)
+        dynamics_output = self.dynamics(state)
+        next_dynamic_state = self.next_dynamic_state(dynamics_output)
+        reward = self.reward(dynamics_output)
+        done = self.done(dynamics_output)
 
-        # Get an inn_end_fl, a reward and a next state
-        event_in = torch.cat([start_pit.squeeze(),
-                              fld_team.squeeze(),
-                              state.squeeze(),
-                              bat_this.squeeze()], dim=1)
-        event = self.event_model(event_in)
-        reward = self.reward_model(event)
-        inn_end_fl = self.inn_end_model(event)
-        next_state = self.next_state_model(event)
+        prediction_output = self.prediction(state)
+        value_away = prediction_output[:, :1]
+        value_home = prediction_output[:, 1:]
 
-        # Get a next pit_lineup, value_game, value_away and value_home
-        bat = self.bat_model(torch.cat([bat_this, bat_next], dim=1))  # (batch_size, embedding_dim)
-        value_in = torch.cat([start_pit.squeeze(),
-                              fld_team.squeeze(),
-                              state.squeeze(),
-                              bat.squeeze()], dim=1)
-        value = self.value_model(value_in)
-        value_game = self.value_game_model(value)
-        value_away = self.value_away_model(value)
-        value_home = self.value_home_model(value)
-
-        return next_state, reward, inn_end_fl, value_game, value_away, value_home
+        return next_dynamic_state, reward, done, value_away, value_home

@@ -1,7 +1,6 @@
 '''
 Predicting the game of baseball using reinforcement learning
 '''
-
 import os
 import argparse
 import pandas as pd
@@ -20,9 +19,33 @@ def tensorboard():
     '''
     dataiter = iter(trainloader)
     start_obs, _, info, _ = dataiter.next()
-    inputs = get_input(start_obs, info)
+
+    static_state = model.get_static_state(
+        away_start_bat_ids=info['away_start_bat_ids'].to(device),
+        home_start_bat_ids=info['home_start_bat_ids'].to(device),
+        away_start_pit_id=info['away_start_pit_id'].to(device),
+        home_start_pit_id=info['home_start_pit_id'].to(device),
+        away_team_id=info['away_team_id'].to(device),
+        home_team_id=info['home_team_id'].to(device)
+    )
+
+    dynamic_state = model.get_dynamic_state(
+        base1_run_id=start_obs['base1_run_id'].to(device),
+        base2_run_id=start_obs['base2_run_id'].to(device),
+        base3_run_id=start_obs['base3_run_id'].to(device),
+        away_bat_lineup=start_obs['away_bat_lineup'].to(device),
+        home_bat_lineup=start_obs['home_bat_lineup'].to(device),
+        away_pit_lineup=start_obs['away_pit_lineup'].to(device),
+        home_pit_lineup=start_obs['home_pit_lineup'].to(device),
+        bat_home_id=start_obs['bat_home_id'].to(device),
+        inn_ct=start_obs['inn_ct'].to(device),
+        outs_ct=start_obs['outs_ct'].to(device),
+        away_score_ct=start_obs['away_score_ct'].to(device),
+        home_score_ct=start_obs['home_score_ct'].to(device)
+    )
+
     writer = SummaryWriter('runs/baseball')
-    writer.add_graph(model, list(inputs))
+    writer.add_graph(model, [static_state, dynamic_state])
     writer.close()
 
 
@@ -42,49 +65,6 @@ def count_numbers(tmp):
            len(tmp['AWAY_TEAM_ID'].unique())
 
 
-def get_input(start_obs, info):
-    '''
-    Returns:
-        start_pit_id,
-        fld_team_id,
-        state,
-        bat_this_id,
-        bat_next_ids
-    '''
-    start_bats_ids = torch.where(start_obs['bat_home_id'].repeat(1, 9) == 0,
-                                 info['away_start_bat_ids'], info['home_start_bat_ids'])
-    bat_lineup = start_obs['bat_lineup']
-    bat_next_matrix = [(bat_lineup + i) % 9 for i in range(8)]
-    bat_next_matrix = torch.cat(bat_next_matrix, dim=1)
-    bat_this_id = torch.gather(start_bats_ids, 1, bat_lineup - 1)
-    bat_next_ids = torch.gather(start_bats_ids, 1, bat_next_matrix)
-
-    # Get start_pit_id and fld_team_id
-    start_pit_id = torch.where(start_obs['bat_home_id'] == 0,
-                               info['home_start_pit_id'], info['away_start_pit_id'])
-    fld_team_id = torch.where(start_obs['bat_home_id'] == 0,
-                              info['home_team_id'], info['away_team_id'])
-
-    # Get state
-    state = model.get_state(
-        away_score_ct=start_obs['away_score_ct'].to(device),
-        home_score_ct=start_obs['home_score_ct'].to(device),
-        inn_ct=start_obs['inn_ct'].to(device),
-        bat_home_id=start_obs['bat_home_id'].to(device),
-        pit_lineup=start_obs['pit_lineup'].to(device),
-        outs_ct=start_obs['outs_ct'].to(device),
-        base1_run_id=start_obs['base1_run_id'].to(device),
-        base2_run_id=start_obs['base2_run_id'].to(device),
-        base3_run_id=start_obs['base3_run_id'].to(device)
-    )
-
-    return start_pit_id.to(device), \
-           fld_team_id.to(device), \
-           state.to(device), \
-           bat_this_id.to(device), \
-           bat_next_ids.to(device) \
-
-
 def train():
     '''
     Train the model
@@ -94,19 +74,17 @@ def train():
         print(f'epoch {epoch}')
 
         training_losses = {
-            'next_state': [],
+            'next_dynamic_state': [],
             'reward': [],
-            'inn_end_fl': [],
-            'value_game': [],
+            'done': [],
             'value_away': [],
             'value_home': [],
             'total': []
         }
         validation_losses = {
-            'next_state': [],
+            'next_dynamic_state': [],
             'reward': [],
-            'inn_end_fl': [],
-            'value_game': [],
+            'done': [],
             'value_away': [],
             'value_home': [],
             'total': []
@@ -115,42 +93,60 @@ def train():
         # Training
         model.train()
         data_size = 0
-        true_positive = 0
-        true_negative = 0
+        # true_positive = 0
+        # true_negative = 0
         for start_obs, end_obs, info, targets in trainloader:
             batch_size = start_obs['inn_ct'].shape[0]
             data_size += batch_size
 
-            # Preprocess inputs
-            start_pit_id, fld_team_id, state, bat_this_id, bat_next_ids = get_input(start_obs, info)
+            static_state = model.get_static_state(
+                away_start_bat_ids=info['away_start_bat_ids'].to(device),
+                home_start_bat_ids=info['home_start_bat_ids'].to(device),
+                away_start_pit_id=info['away_start_pit_id'].to(device),
+                home_start_pit_id=info['home_start_pit_id'].to(device),
+                away_team_id=info['away_team_id'].to(device),
+                home_team_id=info['home_team_id'].to(device)
+            )
+
+            dynamic_state = model.get_dynamic_state(
+                base1_run_id=start_obs['base1_run_id'].to(device),
+                base2_run_id=start_obs['base2_run_id'].to(device),
+                base3_run_id=start_obs['base3_run_id'].to(device),
+                away_bat_lineup=start_obs['away_bat_lineup'].to(device),
+                home_bat_lineup=start_obs['home_bat_lineup'].to(device),
+                away_pit_lineup=start_obs['away_pit_lineup'].to(device),
+                home_pit_lineup=start_obs['home_pit_lineup'].to(device),
+                bat_home_id=start_obs['bat_home_id'].to(device),
+                inn_ct=start_obs['inn_ct'].to(device),
+                outs_ct=start_obs['outs_ct'].to(device),
+                away_score_ct=start_obs['away_score_ct'].to(device),
+                home_score_ct=start_obs['home_score_ct'].to(device)
+            )
 
             # Forward the model
-            next_state, reward, inn_end_fl, value_game, value_away, value_home = \
-                model(start_pit_id.to(device),
-                      fld_team_id.to(device),
-                      state.to(device),
-                      bat_this_id.to(device),
-                      bat_next_ids.to(device))
+            next_dynamic_state, reward, done, value_away, value_home = \
+                model(static_state, dynamic_state)
 
-            # Get targets['next_state']
-            targets['next_state'] = model.get_state(
-                away_score_ct=end_obs['away_score_ct'].to(device),
-                home_score_ct=end_obs['home_score_ct'].to(device),
-                inn_ct=end_obs['inn_ct'].to(device),
-                bat_home_id=end_obs['bat_home_id'].to(device),
-                pit_lineup=end_obs['pit_lineup'].to(device),
-                outs_ct=end_obs['outs_ct'].to(device),
+            targets['next_dynamic_state'] = model.get_dynamic_state(
                 base1_run_id=end_obs['base1_run_id'].to(device),
                 base2_run_id=end_obs['base2_run_id'].to(device),
-                base3_run_id=end_obs['base3_run_id'].to(device)
+                base3_run_id=end_obs['base3_run_id'].to(device),
+                away_bat_lineup=end_obs['away_bat_lineup'].to(device),
+                home_bat_lineup=end_obs['home_bat_lineup'].to(device),
+                away_pit_lineup=end_obs['away_pit_lineup'].to(device),
+                home_pit_lineup=end_obs['home_pit_lineup'].to(device),
+                bat_home_id=end_obs['bat_home_id'].to(device),
+                inn_ct=end_obs['inn_ct'].to(device),
+                outs_ct=end_obs['outs_ct'].to(device),
+                away_score_ct=end_obs['away_score_ct'].to(device),
+                home_score_ct=end_obs['home_score_ct'].to(device)
             )
 
             # Get losses
             loss = {}
-            loss['next_state'] = MSELoss(next_state, targets['next_state'].to(device))
+            loss['next_dynamic_state'] = MSELoss(next_dynamic_state, targets['next_dynamic_state'].to(device))
             loss['reward'] = MSELoss(reward, targets['reward'].to(device))
-            loss['inn_end_fl'] = BCELoss(inn_end_fl, targets['inn_end_fl'].to(device))
-            loss['value_game'] = BCELoss(value_game, targets['value_game'].to(device))
+            loss['done'] = BCELoss(done, targets['done'].to(device))
             loss['value_away'] = MSELoss(value_away, targets['value_away'].to(device))
             loss['value_home'] = MSELoss(value_home, targets['value_home'].to(device))
             loss['total'] = sum(loss.values())
@@ -158,10 +154,6 @@ def train():
             # Save the losses
             for key in loss:
                 training_losses[key].append(loss[key].tolist() * batch_size)
-
-            # value game accuracy
-            true_positive += torch.sum((value_game.cpu() > 0.5) * (targets['value_game'] > 0.5)).tolist()
-            true_negative += torch.sum((value_game.cpu() < 0.5) * (targets['value_game'] < 0.5)).tolist()
 
             # Optimize
             optimizer.zero_grad()
@@ -172,48 +164,63 @@ def train():
         for key in training_losses:
             print(f'training {key} loss: {sum(training_losses[key]) / data_size}')
 
-        # Print value game accuracy
-        print('training value_game accuracy:', (true_positive + true_negative) / data_size)
-
         # Validation
         model.eval()
         data_size = 0
-        true_positive = 0
-        true_negative = 0
+        # true_positive = 0
+        # true_negative = 0
         for start_obs, end_obs, info, targets in validloader:
             batch_size = start_obs['inn_ct'].shape[0]
             data_size += batch_size
 
-            # Preprocess inputs
-            start_pit_id, fld_team_id, state, bat_this_id, bat_next_ids = get_input(start_obs, info)
+            static_state = model.get_static_state(
+                away_start_bat_ids=info['away_start_bat_ids'].to(device),
+                home_start_bat_ids=info['home_start_bat_ids'].to(device),
+                away_start_pit_id=info['away_start_pit_id'].to(device),
+                home_start_pit_id=info['home_start_pit_id'].to(device),
+                away_team_id=info['away_team_id'].to(device),
+                home_team_id=info['home_team_id'].to(device)
+            )
+
+            dynamic_state = model.get_dynamic_state(
+                base1_run_id=start_obs['base1_run_id'].to(device),
+                base2_run_id=start_obs['base2_run_id'].to(device),
+                base3_run_id=start_obs['base3_run_id'].to(device),
+                away_bat_lineup=start_obs['away_bat_lineup'].to(device),
+                home_bat_lineup=start_obs['home_bat_lineup'].to(device),
+                away_pit_lineup=start_obs['away_pit_lineup'].to(device),
+                home_pit_lineup=start_obs['home_pit_lineup'].to(device),
+                bat_home_id=start_obs['bat_home_id'].to(device),
+                inn_ct=start_obs['inn_ct'].to(device),
+                outs_ct=start_obs['outs_ct'].to(device),
+                away_score_ct=start_obs['away_score_ct'].to(device),
+                home_score_ct=start_obs['home_score_ct'].to(device)
+            )
 
             # Forward the model
-            next_state, reward, inn_end_fl, value_game, value_away, value_home = \
-                model(start_pit_id.to(device),
-                    fld_team_id.to(device),
-                    state.to(device),
-                    bat_this_id.to(device),
-                    bat_next_ids.to(device))
+            next_dynamic_state, reward, done, value_away, value_home = \
+                model(static_state, dynamic_state)
 
-            # Get targets['next_state']
-            targets['next_state'] = model.get_state(
-                away_score_ct=end_obs['away_score_ct'].to(device),
-                home_score_ct=end_obs['home_score_ct'].to(device),
-                inn_ct=end_obs['inn_ct'].to(device),
-                bat_home_id=end_obs['bat_home_id'].to(device),
-                pit_lineup=end_obs['pit_lineup'].to(device),
-                outs_ct=end_obs['outs_ct'].to(device),
+            targets['next_dynamic_state'] = model.get_dynamic_state(
                 base1_run_id=end_obs['base1_run_id'].to(device),
                 base2_run_id=end_obs['base2_run_id'].to(device),
-                base3_run_id=end_obs['base3_run_id'].to(device)
+                base3_run_id=end_obs['base3_run_id'].to(device),
+                away_bat_lineup=end_obs['away_bat_lineup'].to(device),
+                home_bat_lineup=end_obs['home_bat_lineup'].to(device),
+                away_pit_lineup=end_obs['away_pit_lineup'].to(device),
+                home_pit_lineup=end_obs['home_pit_lineup'].to(device),
+                bat_home_id=end_obs['bat_home_id'].to(device),
+                inn_ct=end_obs['inn_ct'].to(device),
+                outs_ct=end_obs['outs_ct'].to(device),
+                away_score_ct=end_obs['away_score_ct'].to(device),
+                home_score_ct=end_obs['home_score_ct'].to(device)
             )
 
             # Get losses
             loss = {}
-            loss['next_state'] = MSELoss(next_state, targets['next_state'].to(device))
+            loss['next_dynamic_state'] = MSELoss(next_dynamic_state, targets['next_dynamic_state'].to(device))
             loss['reward'] = MSELoss(reward, targets['reward'].to(device))
-            loss['inn_end_fl'] = BCELoss(inn_end_fl, targets['inn_end_fl'].to(device))
-            loss['value_game'] = BCELoss(value_game, targets['value_game'].to(device))
+            loss['done'] = BCELoss(done, targets['done'].to(device))
             loss['value_away'] = MSELoss(value_away, targets['value_away'].to(device))
             loss['value_home'] = MSELoss(value_home, targets['value_home'].to(device))
             loss['total'] = sum(loss.values())
@@ -222,22 +229,15 @@ def train():
             for key in loss:
                 validation_losses[key].append(loss[key].tolist() * batch_size)
 
-            # value game accuracy
-            true_positive += torch.sum((value_game.cpu() > 0.5) * (targets['value_game'] > 0.5)).tolist()
-            true_negative += torch.sum((value_game.cpu() < 0.5) * (targets['value_game'] < 0.5)).tolist()
-
         # Print validation losses
         for key in validation_losses:
             print(f'validation {key} loss: {sum(validation_losses[key]) / data_size}')
-
-        # Print value game accuracy
-        print('validation value_game accuracy:', (true_positive + true_negative) / data_size)
 
 
 if __name__ == "__main__":
     # Get arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--lr', type=float, default=0.001, metavar='R',
+    parser.add_argument('--lr', type=float, default=1e-6, metavar='R',
                         help='learning rate for training (default: 0.001)')
     parser.add_argument('--embedding-dim', type=int, default=256, metavar='N',
                         help='embedding dimension (default: 256)')
@@ -295,5 +295,5 @@ if __name__ == "__main__":
     MSELoss = torch.nn.MSELoss()
     BCELoss = torch.nn.BCELoss()
 
-    tensorboard()
+    # tensorboard()
     train()
