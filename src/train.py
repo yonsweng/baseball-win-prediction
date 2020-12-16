@@ -90,12 +90,12 @@ def train():
 
         # Training
         model.train()
-        data_size = 0
+        train_data_size = 0
         # true_positive = 0
         # true_negative = 0
         for start_obs, end_obs, info, targets in trainloader:
             batch_size = start_obs['inn_ct'].shape[0]
-            data_size += batch_size
+            train_data_size += batch_size
 
             static_state = model.get_static_state(
                 away_start_bat_ids=info['away_start_bat_ids'].to(device),
@@ -160,19 +160,16 @@ def train():
 
         # Print training losses
         for key in training_losses:
-            print(f'training {key} loss: {sum(training_losses[key]) / data_size}')
-
-            # For TensorBoard
-            tb.add_scalar(f'training {key} loss', sum(training_losses[key]) / data_size, epoch)
+            print(f'training {key} loss: {sum(training_losses[key]) / train_data_size}')
 
         # Validation
         model.eval()
-        data_size = 0
+        valid_data_size = 0
         # true_positive = 0
         # true_negative = 0
         for start_obs, end_obs, info, targets in validloader:
             batch_size = start_obs['inn_ct'].shape[0]
-            data_size += batch_size
+            valid_data_size += batch_size
 
             static_state = model.get_static_state(
                 away_start_bat_ids=info['away_start_bat_ids'].to(device),
@@ -232,10 +229,13 @@ def train():
 
         # Print validation losses
         for key in validation_losses:
-            print(f'validation {key} loss: {sum(validation_losses[key]) / data_size}')
+            print(f'validation {key} loss: {sum(validation_losses[key]) / valid_data_size}')
 
             # For TensorBoard
-            tb.add_scalar(f'validation {key} loss', sum(validation_losses[key]) / data_size, epoch)
+            tb.add_scalars(main_tag=f'{key} loss',
+                           tag_scalar_dict={'training': sum(training_losses[key]) / train_data_size,
+                                            'validation': sum(validation_losses[key]) / valid_data_size},
+                           global_step=epoch)
 
         # Draw histograms for model weights
         tb.add_histogram('bat_emb', model.bat_emb.weight, epoch)
@@ -246,9 +246,11 @@ if __name__ == "__main__":
     # Get arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--lr', type=float, default=1e-6, metavar='R',
-                        help='learning rate for training (default: 0.001)')
+                        help='learning rate for training (default: 1e-6)')
     parser.add_argument('--embedding-dim', type=int, default=256, metavar='N',
                         help='embedding dimension (default: 256)')
+    parser.add_argument('--dropout', type=float, default=0.3, metavar='F',
+                        help='dropout rate (default: 0.3)')
     parser.add_argument('--batch-size', type=int, default=512, metavar='N',
                         help='input batch size for training (default: 512)')
     parser.add_argument('--epochs', type=int, default=100, metavar='N',
@@ -298,13 +300,14 @@ if __name__ == "__main__":
         batch_size=args.batch_size, shuffle=True, num_workers=32)
 
     # Initiate the model
-    model = Model(num_bats, num_pits, num_teams, args.embedding_dim).to(device)
+    model = Model(num_bats, num_pits, num_teams, args.embedding_dim, args.dropout).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     MSELoss = torch.nn.MSELoss()
     BCELoss = torch.nn.BCELoss()
 
     # For TensorBoard
-    tb = SummaryWriter()
+    comment = f'lr={args.lr} emb_dim={args.embedding_dim} dropout={args.dropout}'
+    tb = SummaryWriter(comment=comment)
 
     tensorboard()
     train()

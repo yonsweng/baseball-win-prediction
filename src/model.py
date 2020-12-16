@@ -9,7 +9,7 @@ class Model(nn.Module):
     '''
     Model
     '''
-    def __init__(self, num_bats, num_pits, num_teams, embedding_dim):
+    def __init__(self, num_bats, num_pits, num_teams, embedding_dim, dropout):
         super().__init__()
 
         # Layer parameters
@@ -24,6 +24,7 @@ class Model(nn.Module):
             nn.Flatten(),
             nn.Linear(22 * self.embedding_dim, 4 * self.embedding_dim),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(4 * self.embedding_dim, 2 * self.embedding_dim),
             nn.ReLU(),
             nn.Linear(2 * self.embedding_dim, self.embedding_dim)
@@ -33,8 +34,10 @@ class Model(nn.Module):
             nn.Flatten(),
             nn.Linear(3 * self.embedding_dim, self.embedding_dim),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(self.embedding_dim, self.embedding_dim // 2),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(self.embedding_dim // 2, self.embedding_dim // 8),
             nn.ReLU()
         )
@@ -42,6 +45,7 @@ class Model(nn.Module):
         self.dynamic_representation = nn.Sequential(
             nn.Linear(self.embedding_dim // 8 + 25, 4 * self.embedding_dim),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(4 * self.embedding_dim, 2 * self.embedding_dim),
             nn.ReLU(),
             nn.Linear(2 * self.embedding_dim, self.embedding_dim)
@@ -50,23 +54,29 @@ class Model(nn.Module):
         self.dynamics = nn.Sequential(
             nn.Linear(2 * self.embedding_dim, 2 * self.embedding_dim),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(2 * self.embedding_dim, self.embedding_dim),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(self.embedding_dim, self.embedding_dim // 2),
-            nn.ReLU()
+            nn.ReLU(),
+            nn.Dropout(p=dropout)
         )
 
         self.next_dynamic_state = nn.Sequential(
             nn.Linear(self.embedding_dim // 2, 4 * self.embedding_dim),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(4 * self.embedding_dim, 2 * self.embedding_dim),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(2 * self.embedding_dim, self.embedding_dim)
         )
 
         self.reward = nn.Sequential(
             nn.Linear(self.embedding_dim // 2, self.embedding_dim // 4),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(self.embedding_dim // 4, self.embedding_dim // 8),
             nn.ReLU(),
             nn.Linear(self.embedding_dim // 8, 1)
@@ -75,6 +85,7 @@ class Model(nn.Module):
         self.done = nn.Sequential(
             nn.Linear(self.embedding_dim // 2, self.embedding_dim // 4),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(self.embedding_dim // 4, self.embedding_dim // 8),
             nn.ReLU(),
             nn.Linear(self.embedding_dim // 8, 1),
@@ -84,6 +95,7 @@ class Model(nn.Module):
         self.prediction = nn.Sequential(
             nn.Linear(2 * self.embedding_dim, self.embedding_dim),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(self.embedding_dim, self.embedding_dim // 2),
             nn.ReLU(),
             nn.Linear(self.embedding_dim // 2, 2)
