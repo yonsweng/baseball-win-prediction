@@ -67,6 +67,8 @@ def train():
     '''
     Train the model
     '''
+    min_total_loss = 99.99
+
     # Loop over epochs
     for epoch in range(args.epochs):
         print(f'epoch {epoch}')
@@ -242,6 +244,10 @@ def train():
         tb.add_histogram('pit_emb', model.pit_emb.weight, epoch)
         tb.add_histogram('team_emb', model.team_emb.weight, epoch)
 
+        # Save the model
+        if validation_losses['total'] < min_total_loss:
+            torch.save(model.state_dict(), f'models/{comment}.pt')
+
 if __name__ == "__main__":
     # Get arguments
     parser = argparse.ArgumentParser()
@@ -285,8 +291,8 @@ if __name__ == "__main__":
 
     # Train-test split
     games = [game for _, game in data.groupby(data['GAME_ID'])]
-    train_games, test_games = train_test_split(games, test_size=0.2)
-    train_games, valid_games = train_test_split(train_games, test_size=0.2)
+    train_games, test_games = train_test_split(games, test_size=0.2, random_state=args.seed)
+    train_games, valid_games = train_test_split(train_games, test_size=0.2, random_state=args.seed)
     train_games = pd.concat(train_games, ignore_index=True)
     valid_games = pd.concat(valid_games, ignore_index=True)
     test_games = pd.concat(test_games, ignore_index=True)
