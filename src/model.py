@@ -27,7 +27,10 @@ class Model(nn.Module):
             nn.Dropout(p=dropout),
             nn.Linear(4 * self.embedding_dim, 2 * self.embedding_dim),
             nn.ReLU(),
-            nn.Linear(2 * self.embedding_dim, self.embedding_dim)
+            nn.Dropout(p=dropout),
+            nn.Linear(2 * self.embedding_dim, self.embedding_dim),
+            nn.ReLU(),
+            nn.Dropout(p=dropout)
         )
 
         self.compression = nn.Sequential(
@@ -38,16 +41,18 @@ class Model(nn.Module):
             nn.Linear(self.embedding_dim, self.embedding_dim // 2),
             nn.ReLU(),
             nn.Dropout(p=dropout),
-            nn.Linear(self.embedding_dim // 2, self.embedding_dim // 8),
-            nn.ReLU()
+            nn.Linear(self.embedding_dim // 2, self.embedding_dim // 4),
+            nn.ReLU(),
+            nn.Dropout(p=dropout)
         )
 
         self.dynamic_representation = nn.Sequential(
-            nn.Linear(self.embedding_dim // 8 + 25, 4 * self.embedding_dim),
+            nn.Linear(self.embedding_dim // 4 + 25, 4 * self.embedding_dim),
             nn.ReLU(),
             nn.Dropout(p=dropout),
             nn.Linear(4 * self.embedding_dim, 2 * self.embedding_dim),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(2 * self.embedding_dim, self.embedding_dim)
         )
 
@@ -79,6 +84,7 @@ class Model(nn.Module):
             nn.Dropout(p=dropout),
             nn.Linear(self.embedding_dim // 4, self.embedding_dim // 8),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(self.embedding_dim // 8, 1)
         )
 
@@ -88,6 +94,7 @@ class Model(nn.Module):
             nn.Dropout(p=dropout),
             nn.Linear(self.embedding_dim // 4, self.embedding_dim // 8),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(self.embedding_dim // 8, 1),
             nn.Sigmoid()
         )
@@ -98,6 +105,7 @@ class Model(nn.Module):
             nn.Dropout(p=dropout),
             nn.Linear(self.embedding_dim, self.embedding_dim // 2),
             nn.ReLU(),
+            nn.Dropout(p=dropout),
             nn.Linear(self.embedding_dim // 2, 2)
         )
 
