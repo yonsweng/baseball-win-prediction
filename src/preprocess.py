@@ -27,6 +27,12 @@ used_cols = [
     'GAME_END_FL',
     'FINAL_AWAY_SCORE_CT',
     'FINAL_HOME_SCORE_CT',
+    'BAT_ID',
+    'PIT_ID',
+    'BAT_DEST_ID',
+    'RUN1_DEST_ID',
+    'RUN2_DEST_ID',
+    'RUN3_DEST_ID'
 ] + [f'AWAY_START_BAT{i}_ID' for i in range(1, 10)] \
   + [f'HOME_START_BAT{i}_ID' for i in range(1, 10)] \
   + diff_cols \

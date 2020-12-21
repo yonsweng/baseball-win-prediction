@@ -19,6 +19,8 @@ class BaseballDataset(Dataset):
         data = self.data.iloc[idx, :]
 
         start_obs = {
+            'bat_id': torch.tensor([data['BAT_ID']], dtype=torch.long),
+            'pit_id': torch.tensor([data['PIT_ID']], dtype=torch.long),
             'base1_run_id': torch.tensor([data['BASE1_RUN_ID']], dtype=torch.long),
             'base2_run_id': torch.tensor([data['BASE2_RUN_ID']], dtype=torch.long),
             'base3_run_id': torch.tensor([data['BASE3_RUN_ID']], dtype=torch.long),
@@ -62,7 +64,11 @@ class BaseballDataset(Dataset):
                                     else data['END_HOME_SCORE_CT'] - data['HOME_SCORE_CT']]),
             'done': torch.Tensor([data['GAME_END_FL']]),
             'value_away': torch.Tensor([data['FINAL_AWAY_SCORE_CT'] - data['AWAY_SCORE_CT']]),
-            'value_home': torch.Tensor([data['FINAL_HOME_SCORE_CT'] - data['HOME_SCORE_CT']])
+            'value_home': torch.Tensor([data['FINAL_HOME_SCORE_CT'] - data['HOME_SCORE_CT']]),
+            'bat_dest': torch.tensor([data['BAT_DEST_ID']], dtype=torch.long),
+            'run1_dest': torch.tensor([data['RUN1_DEST_ID']], dtype=torch.long),
+            'run2_dest': torch.tensor([data['RUN2_DEST_ID']], dtype=torch.long),
+            'run3_dest': torch.tensor([data['RUN3_DEST_ID']], dtype=torch.long)
         }
 
         return start_obs, end_obs, info, targets

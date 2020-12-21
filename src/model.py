@@ -1,113 +1,95 @@
-'''
-model.py
-'''
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class Model(nn.Module):
-    '''
-    Model
-    '''
-    def __init__(self, num_bats, num_pits, num_teams, embedding_dim, dropout):
+    def __init__(self, num_bats, num_pits, num_teams, emb_dim, dropout):
         super().__init__()
 
-        # Layer parameters
-        self.embedding_dim = embedding_dim
+        # Model parameters
+        self.emb_dim = emb_dim
+        self.dropout = dropout
 
         # Embedding layers
-        self.bat_emb = nn.Embedding(num_bats, self.embedding_dim, 0)
-        self.pit_emb = nn.Embedding(num_pits, self.embedding_dim)
-        self.team_emb = nn.Embedding(num_teams, self.embedding_dim)
+        self.bat_emb = nn.Embedding(num_bats, self.emb_dim, 0)
+        self.pit_emb = nn.Embedding(num_pits, self.emb_dim)
+        self.team_emb = nn.Embedding(num_teams, self.emb_dim)
 
-        self.static_representation = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(22 * self.embedding_dim, 4 * self.embedding_dim),
-            nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(4 * self.embedding_dim, 2 * self.embedding_dim),
-            nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(2 * self.embedding_dim, self.embedding_dim),
-            nn.ReLU(),
-            nn.Dropout(p=dropout)
-        )
+        # Make sub-models
+        self.make_embed_model()
+        self.make_dynamic_representation_model()
+        self.make_dynamics_model()
+        self.make_prediction_model()
 
-        self.compression = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(3 * self.embedding_dim, self.embedding_dim),
+    def make_embed_model(self):
+        self.embed_model = nn.Sequential(
+            nn.Linear(1 + 6 * self.emb_dim, 256),
             nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(self.embedding_dim, self.embedding_dim // 2),
+            nn.Dropout(self.dropout),
+            nn.Linear(256, 128),
             nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(self.embedding_dim // 2, self.embedding_dim // 4),
+            nn.Dropout(self.dropout),
+            nn.Linear(128, 64),
             nn.ReLU(),
-            nn.Dropout(p=dropout)
+            nn.Dropout(self.dropout)
         )
+        self.bat_dest_layer = nn.Linear(64, 5)
+        self.run1_dest_layer = nn.Linear(64, 5)
+        self.run2_dest_layer = nn.Linear(64, 5)
+        self.run3_dest_layer = nn.Linear(64, 5)
 
-        self.dynamic_representation = nn.Sequential(
-            nn.Linear(self.embedding_dim // 4 + 25, 4 * self.embedding_dim),
-            nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(4 * self.embedding_dim, 2 * self.embedding_dim),
-            nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(2 * self.embedding_dim, self.embedding_dim)
-        )
+    def make_dynamic_representation_model(self):
+        return
 
-        self.dynamics = nn.Sequential(
-            nn.Linear(2 * self.embedding_dim, 2 * self.embedding_dim),
-            nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(2 * self.embedding_dim, self.embedding_dim),
-            nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(self.embedding_dim, self.embedding_dim // 2),
-            nn.ReLU(),
-            nn.Dropout(p=dropout)
-        )
+    def make_dynamics_model(self):
+        return
 
-        self.next_dynamic_state = nn.Sequential(
-            nn.Linear(self.embedding_dim // 2, 4 * self.embedding_dim),
-            nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(4 * self.embedding_dim, 2 * self.embedding_dim),
-            nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(2 * self.embedding_dim, self.embedding_dim)
-        )
+    def make_prediction_model(self):
+        return
 
-        self.reward = nn.Sequential(
-            nn.Linear(self.embedding_dim // 2, self.embedding_dim // 4),
-            nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(self.embedding_dim // 4, self.embedding_dim // 8),
-            nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(self.embedding_dim // 8, 1)
-        )
+    def embed(
+        self,
+        outs_ct,
+        pit_id,
+        fld_team_id,
+        bat_id,
+        base1_run_id,
+        base2_run_id,
+        base3_run_id
+    ):
+        '''
+        Returns:
+            bat_dest     (BATCH_SIZE, 5),
+            run1_dest_id (BATCH_SIZE, 5),
+            run2_dest_id (BATCH_SIZE, 5),
+            run3_dest_id (BATCH_SIZE, 5)
+        '''
+        pit = self.pit_emb(pit_id).squeeze()
+        fld_team = self.team_emb(fld_team_id).squeeze()
+        bat = self.bat_emb(bat_id).squeeze()
+        base1_run = self.bat_emb(base1_run_id).squeeze()
+        base2_run = self.bat_emb(base2_run_id).squeeze()
+        base3_run = self.bat_emb(base3_run_id).squeeze()
 
-        self.done = nn.Sequential(
-            nn.Linear(self.embedding_dim // 2, self.embedding_dim // 4),
-            nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(self.embedding_dim // 4, self.embedding_dim // 8),
-            nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(self.embedding_dim // 8, 1),
-            nn.Sigmoid()
-        )
+        embeddings = torch.cat([
+            outs_ct,
+            pit,
+            fld_team,
+            bat,
+            base1_run,
+            base2_run,
+            base3_run
+        ], dim=1)
 
-        self.prediction = nn.Sequential(
-            nn.Linear(2 * self.embedding_dim, self.embedding_dim),
-            nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(self.embedding_dim, self.embedding_dim // 2),
-            nn.ReLU(),
-            nn.Dropout(p=dropout),
-            nn.Linear(self.embedding_dim // 2, 2)
-        )
+        out = self.embed_model(embeddings)
+
+        bat_dest = self.bat_dest_layer(out)
+        run1_dest = self.run1_dest_layer(out)
+        run2_dest = self.run2_dest_layer(out)
+        run3_dest = self.run3_dest_layer(out)
+
+        return bat_dest, run1_dest, run2_dest, run3_dest
 
     def get_static_state(
         self,

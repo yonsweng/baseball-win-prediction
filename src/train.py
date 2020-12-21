@@ -15,6 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 from preprocess import preprocess
 from dataset import BaseballDataset
 from model import Model
+from embedding import train_embeddings, load_embeddings
 
 
 def count_numbers(tmp):
@@ -140,6 +141,10 @@ def train():
         'total'
     ]
     min_val_total_loss = 99.99
+    
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    MSELoss = torch.nn.MSELoss()
+    BCELoss = torch.nn.BCELoss()
 
     lr_lambda = lambda x: x / args.warmup if x <= args.warmup else (x / args.warmup) ** -0.5
     scheduler = LambdaLR(optimizer, lr_lambda)
@@ -258,20 +263,22 @@ def train():
 if __name__ == "__main__":
     # Get arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--lr', type=float, default=5e-6, metavar='R',
-                        help='learning rate for training (default: 1e-5)')
+    parser.add_argument('--train-emb', action='store_true')
+    parser.add_argument('--load-emb', action='store_true')
+    parser.add_argument('--lr', type=float, default=1e-3, metavar='F',
+                        help='learning rate for training (default: 1e-3)')
     parser.add_argument('--warmup', type=int, default=2000, metavar='N',
                         help='learning rate warmup step (default: 2000)')
-    parser.add_argument('--weight-decay', type=float, default=0.1, metavar='F',
-                        help='L2 regularization (default: 0.1)')
+    parser.add_argument('--weight-decay', type=float, default=0.0, metavar='F',
+                        help='L2 regularization (default: 0.0)')
+    parser.add_argument('--dropout', type=float, default=0.0, metavar='F',
+                        help='dropout rate (default: 0.0)')
+    parser.add_argument('--emb-dim', type=int, default=32, metavar='N',
+                        help='embedding dimension (default: 32)')
     parser.add_argument('--state-loss', type=float, default=1, metavar='F',
                         help='state loss multiple (default: 1)')
     parser.add_argument('--value-loss', type=float, default=1, metavar='F',
                         help='value loss reduction (default: 1)')
-    parser.add_argument('--embedding-dim', type=int, default=256, metavar='N',
-                        help='embedding dimension (default: 256)')
-    parser.add_argument('--dropout', type=float, default=0.3, metavar='F',
-                        help='dropout rate (default: 0.3)')
     parser.add_argument('--batch-size', type=int, default=512, metavar='N',
                         help='input batch size for training (default: 512)')
     parser.add_argument('--epochs', type=int, default=50, metavar='N',
@@ -327,13 +334,10 @@ if __name__ == "__main__":
         batch_size=args.batch_size, shuffle=False, num_workers=1)
 
     # Initiate the model
-    model = Model(num_bats, num_pits, num_teams, args.embedding_dim, args.dropout).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    MSELoss = torch.nn.MSELoss()
-    BCELoss = torch.nn.BCELoss()
+    model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout).to(device)
 
     # For TensorBoard
-    comment = f'_lr={args.lr}_emb_dim={args.embedding_dim}_dropout={args.dropout}'
+    comment = f'_lr={args.lr}_decay={args.weight_decay}_emb_dim={args.emb_dim}_dropout={args.dropout}'
     tb = SummaryWriter(comment=comment)
 
     # Who wins majority
@@ -349,7 +353,15 @@ if __name__ == "__main__":
           f'draw={draw / total_cnt}')
     # home_wins=0.5526992287917738, away_wins=0.44473007712082263, draw=0.002570694087403599
 
-    tensorboard()
-    train()
+    # tensorboard()
+
+    if args.train_emb:
+        train_embeddings(model, trainloader, validloader, device, args, tb)
+
+    if args.load_emb:
+        load_embeddings(model, tb)
+
+    if not args.train_emb:
+        train()
 
     tb.close()
