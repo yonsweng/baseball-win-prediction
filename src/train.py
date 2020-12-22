@@ -116,7 +116,7 @@ def train_prediction():
     pretrained_model_path = get_latest_file_path('../models', 'dynamics')
     model.load_state_dict(torch.load(pretrained_model_path))
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5, weight_decay=args.l2)
 
     MSELoss = torch.nn.MSELoss()
     CELoss = torch.nn.CrossEntropyLoss()
