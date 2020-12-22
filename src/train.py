@@ -273,7 +273,196 @@ def train_prediction():
 
 
 def train():
-    return
+    pretrained_model_path = get_latest_file_path('../models', 'prediction')
+    model.load_state_dict(torch.load(pretrained_model_path))
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
+
+    MSELoss = torch.nn.MSELoss()
+    CELoss = torch.nn.CrossEntropyLoss()
+
+    lr_lambda = lambda x: x / args.warmup if x <= args.warmup else (x / args.warmup) ** -0.5
+    scheduler = LambdaLR(optimizer, lr_lambda)
+
+    clip = lambda x: x.where(x <= 4, torch.tensor([4], dtype=torch.long))
+
+    best_loss = 99.9
+
+    for epoch in range(args.epochs):
+        print(f'epoch {epoch}')
+
+        # Training
+        model.train()
+        sum_loss = 0.
+        true_negative = 0
+        true_positive = 0
+        for features, targets in trainloader:
+            fld_team_id = features['away_team_id'].where(
+                features['bat_home_id'].type(torch.long) == 1,
+                features['home_team_id']
+            )
+            away_next_bats_ids = get_next_bats(
+                features['away_start_bat_ids'], features['away_bat_lineup'])
+            home_next_bats_ids = get_next_bats(
+                features['home_start_bat_ids'], features['home_bat_lineup'])
+            event_runs_ct, \
+            event_outs_ct, \
+            bat_dest, \
+            run1_dest, \
+            run2_dest, \
+            run3_dest, \
+            value_away, \
+            value_home = model(
+                features['away_score_ct'].to(device),
+                features['home_score_ct'].to(device),
+                features['inn_ct'].to(device),
+                features['bat_home_id'].to(device),
+                features['outs_ct'].to(device),
+                features['bat_id'].to(device),
+                features['pit_id'].to(device),
+                fld_team_id.to(device),
+                features['base1_run_id'].to(device),
+                features['base2_run_id'].to(device),
+                features['base3_run_id'].to(device),
+                away_next_bats_ids.to(device),
+                home_next_bats_ids.to(device),
+                features['away_start_pit_id'].to(device),
+                features['home_start_pit_id'].to(device),
+                features['away_team_id'].to(device),
+                features['home_team_id'].to(device)
+            )
+            loss = \
+                MSELoss(event_runs_ct, targets['event_runs_ct'].to(device)) + \
+                MSELoss(event_outs_ct, targets['event_outs_ct'].to(device)) + \
+                CELoss(bat_dest, clip(targets['bat_dest']).squeeze().to(device)) + \
+                CELoss(run1_dest, clip(targets['run1_dest']).squeeze().to(device)) + \
+                CELoss(run2_dest, clip(targets['run2_dest']).squeeze().to(device)) + \
+                CELoss(run3_dest, clip(targets['run3_dest']).squeeze().to(device)) + \
+                MSELoss(value_away, targets['value_away'].to(device)) + \
+                MSELoss(value_home, targets['value_home'].to(device))
+            sum_loss += event_runs_ct.shape[0] * loss.item()
+            true_negative += torch.logical_and(value_away.cpu() > value_home.cpu(),
+                targets['value_away'] > targets['value_home']).sum().item()
+            true_positive += torch.logical_and(value_away.cpu() < value_home.cpu(),
+                targets['value_away'] < targets['value_home']).sum().item()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+        tb.add_scalar('train loss', sum_loss / len(trainloader.dataset), epoch)
+        tb.add_scalar('train TN', true_negative / len(trainloader.dataset), epoch)
+        tb.add_scalar('train TP', true_positive / len(trainloader.dataset), epoch)
+        tb.add_scalar('train acc.', (true_negative + true_positive) / len(trainloader.dataset), epoch)
+
+        # Validation
+        model.eval()
+        sum_loss = 0.
+        true_negative = 0
+        true_positive = 0
+        for features, targets in validloader:
+            fld_team_id = features['away_team_id'].where(
+                features['bat_home_id'].type(torch.long) == 1,
+                features['home_team_id']
+            )
+            away_next_bats_ids = get_next_bats(
+                features['away_start_bat_ids'], features['away_bat_lineup'])
+            home_next_bats_ids = get_next_bats(
+                features['home_start_bat_ids'], features['home_bat_lineup'])
+            event_runs_ct, \
+            event_outs_ct, \
+            bat_dest, \
+            run1_dest, \
+            run2_dest, \
+            run3_dest, \
+            value_away, \
+            value_home = model(
+                features['away_score_ct'].to(device),
+                features['home_score_ct'].to(device),
+                features['inn_ct'].to(device),
+                features['bat_home_id'].to(device),
+                features['outs_ct'].to(device),
+                features['bat_id'].to(device),
+                features['pit_id'].to(device),
+                fld_team_id.to(device),
+                features['base1_run_id'].to(device),
+                features['base2_run_id'].to(device),
+                features['base3_run_id'].to(device),
+                away_next_bats_ids.to(device),
+                home_next_bats_ids.to(device),
+                features['away_start_pit_id'].to(device),
+                features['home_start_pit_id'].to(device),
+                features['away_team_id'].to(device),
+                features['home_team_id'].to(device)
+            )
+            loss = \
+                MSELoss(event_runs_ct, targets['event_runs_ct'].to(device)) + \
+                MSELoss(event_outs_ct, targets['event_outs_ct'].to(device)) + \
+                CELoss(bat_dest, clip(targets['bat_dest']).squeeze().to(device)) + \
+                CELoss(run1_dest, clip(targets['run1_dest']).squeeze().to(device)) + \
+                CELoss(run2_dest, clip(targets['run2_dest']).squeeze().to(device)) + \
+                CELoss(run3_dest, clip(targets['run3_dest']).squeeze().to(device)) + \
+                MSELoss(value_away, targets['value_away'].to(device)) + \
+                MSELoss(value_home, targets['value_home'].to(device))
+            sum_loss += event_runs_ct.shape[0] * loss.item()
+            true_negative += torch.logical_and(value_away.cpu() > value_home.cpu(),
+                targets['value_away'] > targets['value_home']).sum().item()
+            true_positive += torch.logical_and(value_away.cpu() < value_home.cpu(),
+                targets['value_away'] < targets['value_home']).sum().item()
+        tb.add_scalar('valid loss', sum_loss / len(validloader.dataset), epoch)
+        tb.add_scalar('valid TN', true_negative / len(validloader.dataset), epoch)
+        tb.add_scalar('valid TP', true_positive / len(validloader.dataset), epoch)
+        tb.add_scalar('valid acc.', (true_negative + true_positive) / len(validloader.dataset), epoch)
+
+        true_negative = 0
+        true_positive = 0
+        for features, targets in vnewloader:
+            fld_team_id = features['away_team_id'].where(
+                features['bat_home_id'].type(torch.long) == 1,
+                features['home_team_id']
+            )
+            away_next_bats_ids = get_next_bats(
+                features['away_start_bat_ids'], features['away_bat_lineup'])
+            home_next_bats_ids = get_next_bats(
+                features['home_start_bat_ids'], features['home_bat_lineup'])
+            event_runs_ct, \
+            event_outs_ct, \
+            bat_dest, \
+            run1_dest, \
+            run2_dest, \
+            run3_dest, \
+            value_away, \
+            value_home = model(
+                features['away_score_ct'].to(device),
+                features['home_score_ct'].to(device),
+                features['inn_ct'].to(device),
+                features['bat_home_id'].to(device),
+                features['outs_ct'].to(device),
+                features['bat_id'].to(device),
+                features['pit_id'].to(device),
+                fld_team_id.to(device),
+                features['base1_run_id'].to(device),
+                features['base2_run_id'].to(device),
+                features['base3_run_id'].to(device),
+                away_next_bats_ids.to(device),
+                home_next_bats_ids.to(device),
+                features['away_start_pit_id'].to(device),
+                features['home_start_pit_id'].to(device),
+                features['away_team_id'].to(device),
+                features['home_team_id'].to(device)
+            )
+            true_negative += torch.logical_and(value_away.cpu() > value_home.cpu(),
+                targets['value_away'] > targets['value_home']).sum().item()
+            true_positive += torch.logical_and(value_away.cpu() < value_home.cpu(),
+                targets['value_away'] < targets['value_home']).sum().item()
+        tb.add_scalar('vnew TN', true_negative / len(vnewloader.dataset), epoch)
+        tb.add_scalar('vnew TP', true_positive / len(vnewloader.dataset), epoch)
+        tb.add_scalar('vnew acc.', (true_negative + true_positive) / len(vnewloader.dataset), epoch)
+
+        # Save the best model.
+        if sum_loss / len(validloader.dataset) < best_loss:
+            best_loss = sum_loss / len(validloader.dataset)
+            torch.save(model.state_dict(), f'../models/trained_{tag}.pt')
+            print('model saved.')
 
 
 def td_zero():
