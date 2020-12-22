@@ -481,7 +481,7 @@ if __name__ == "__main__":
     parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
     parser.add_argument('--warmup', type=int, default=2000, metavar='N')
     parser.add_argument('--batch-size', type=int, default=512, metavar='N')
-    parser.add_argument('--epochs', type=int, default=20, metavar='N')
+    parser.add_argument('--epochs', type=int, default=25, metavar='N')
     parser.add_argument('--seed', type=int, default=777, metavar='N')
     parser.add_argument('--cuda', type=int, default=0, metavar='N')
     args = parser.parse_args()
