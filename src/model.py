@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class Model(nn.Module):
@@ -16,169 +15,159 @@ class Model(nn.Module):
         self.pit_emb = nn.Embedding(num_pits, self.emb_dim)
         self.team_emb = nn.Embedding(num_teams, self.emb_dim)
 
-        # Make sub-models
-        self.make_embed_model()
-        self.make_dynamic_representation_model()
-        self.make_dynamics_model()
-        self.make_prediction_model()
+        # Input layers
+        self.small_in = nn.Sequential(
+            nn.Linear(5 + 6 * self.emb_dim, 512),
+            nn.ReLU(),
+            nn.Dropout(self.dropout)
+        )
+        self.big_in = nn.Sequential(
+            nn.Linear(5 + 27 * self.emb_dim, 512),
+            nn.ReLU(),
+            nn.Dropout(self.dropout)
+        )
 
-    def make_embed_model(self):
-        self.embed_model = nn.Sequential(
-            nn.Linear(1 + 6 * self.emb_dim, 256),
+        # Shared layer
+        self.shared = nn.Sequential(
+            nn.Linear(512, 256),
             nn.ReLU(),
             nn.Dropout(self.dropout),
             nn.Linear(256, 128),
             nn.ReLU(),
             nn.Dropout(self.dropout),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Dropout(self.dropout)
         )
-        self.bat_dest_layer = nn.Linear(64, 5)
-        self.run1_dest_layer = nn.Linear(64, 5)
-        self.run2_dest_layer = nn.Linear(64, 5)
-        self.run3_dest_layer = nn.Linear(64, 5)
 
-    def make_dynamic_representation_model(self):
-        return
+        # Output layers
+        self.bat_dest = nn.Linear(128, 5)
+        self.run1_dest = nn.Linear(128, 5)
+        self.run2_dest = nn.Linear(128, 5)
+        self.run3_dest = nn.Linear(128, 5)
+        self.event_outs_ct = nn.Linear(128, 1)
+        self.event_runs_ct = nn.Linear(128, 1)
+        self.value_away = nn.Linear(128, 1)
+        self.value_home = nn.Linear(128, 1)
 
-    def make_dynamics_model(self):
-        return
-
-    def make_prediction_model(self):
-        return
-
-    def embed(
+    def dynamics(
         self,
+        away_score_ct,  # (BATCH_SIZE, 1)
+        home_score_ct,
+        inn_ct,
+        bat_home_id,
         outs_ct,
-        pit_id,
-        fld_team_id,
         bat_id,
+        start_pit_id,
+        fld_team_id,
         base1_run_id,
         base2_run_id,
         base3_run_id
     ):
         '''
         Returns:
-            bat_dest     (BATCH_SIZE, 5),
-            run1_dest_id (BATCH_SIZE, 5),
-            run2_dest_id (BATCH_SIZE, 5),
-            run3_dest_id (BATCH_SIZE, 5)
+            event_runs_ct (BATCH_SIZE, 1),
+            event_outs_ct (BATCH_SIZE, 1),
+            bat_dest      (BATCH_SIZE, 5),
+            run1_dest     (BATCH_SIZE, 5),
+            run2_dest     (BATCH_SIZE, 5),
+            run3_dest     (BATCH_SIZE, 5)
         '''
-        pit = self.pit_emb(pit_id).squeeze()
-        fld_team = self.team_emb(fld_team_id).squeeze()
         bat = self.bat_emb(bat_id).squeeze()
+        start_pit = self.pit_emb(start_pit_id).squeeze()
+        fld_team = self.team_emb(fld_team_id).squeeze()
         base1_run = self.bat_emb(base1_run_id).squeeze()
         base2_run = self.bat_emb(base2_run_id).squeeze()
         base3_run = self.bat_emb(base3_run_id).squeeze()
 
-        embeddings = torch.cat([
-            outs_ct,
-            pit,
-            fld_team,
-            bat,
-            base1_run,
-            base2_run,
-            base3_run
-        ], dim=1)
-
-        out = self.embed_model(embeddings)
-
-        bat_dest = self.bat_dest_layer(out)
-        run1_dest = self.run1_dest_layer(out)
-        run2_dest = self.run2_dest_layer(out)
-        run3_dest = self.run3_dest_layer(out)
-
-        return bat_dest, run1_dest, run2_dest, run3_dest
-
-    def get_static_state(
-        self,
-        away_start_bat_ids,  # torch.long(batch_size, 9)
-        home_start_bat_ids,  # torch.long(batch_size, 9)
-        away_start_pit_id,  # torch.long(batch_size, 1)
-        home_start_pit_id,  # torch.long(batch_size, 1)
-        away_team_id,  # torch.long(batch_size, 1)
-        home_team_id  # torch.long(batch_size, 1)
-    ):
-        away_start_bats = self.bat_emb(away_start_bat_ids)  # (batch_size, 9, emb_dim)
-        home_start_bats = self.bat_emb(home_start_bat_ids)  # (batch_size, 9, emb_dim)
-        away_start_pit = self.pit_emb(away_start_pit_id)  # (batch_size, 1, emb_dim)
-        home_start_pit = self.pit_emb(home_start_pit_id)  # (batch_size, 1, emb_dim)
-        away_team = self.team_emb(away_team_id)  # (batch_size, 1, emb_dim)
-        home_team = self.team_emb(home_team_id)  # (batch_size, 1, emb_dim)
-        embeddings = torch.cat([away_start_bats,
-                                home_start_bats,
-                                away_start_pit,
-                                home_start_pit,
-                                away_team,
-                                home_team], dim=1)
-        static_state = self.static_representation(embeddings)
-        return static_state
-
-    def get_dynamic_state(
-        self,
-        base1_run_id,  # torch.long(batch_size, 1)
-        base2_run_id,  # torch.long(batch_size, 1)
-        base3_run_id,  # torch.long(batch_size, 1)
-        away_bat_lineup,  # torch.long(batch_size, 1)
-        home_bat_lineup,  # torch.long(batch_size, 1)
-        away_pit_lineup,  # torch.float(batch_size, 1)
-        home_pit_lineup,  # torch.float(batch_size, 1)
-        bat_home_id,  # torch.float(batch_size, 1)
-        inn_ct,  # torch.float(batch_size, 1)
-        outs_ct,  # torch.float(batch_size, 1)
-        away_score_ct,  # torch.float(batch_size, 1)
-        home_score_ct  # torch.float(batch_size, 1)
-    ):
-        '''
-        Returns:
-            state
-        '''
-        base1_run = self.bat_emb(base1_run_id)  # (batch_size, 1, emb_dim)
-        base2_run = self.bat_emb(base2_run_id)  # (batch_size, 1, emb_dim)
-        base3_run = self.bat_emb(base3_run_id)  # (batch_size, 1, emb_dim)
-        away_bat_lineup_onehot = F.one_hot(away_bat_lineup - 1, num_classes=9).squeeze()
-        home_bat_lineup_onehot = F.one_hot(home_bat_lineup - 1, num_classes=9).squeeze()
-
-        compressed = self.compression(torch.cat([
-            base1_run,
-            base2_run,
-            base3_run
-        ], dim=1))
-
-        representation_input = torch.cat([
-            compressed,
-            away_bat_lineup_onehot,
-            home_bat_lineup_onehot,
-            away_pit_lineup,
-            home_pit_lineup,
-            bat_home_id,
+        values = torch.cat([
+            away_score_ct,  # (BATCH_SIZE, 1)
+            home_score_ct,
             inn_ct,
+            bat_home_id,
             outs_ct,
-            away_score_ct,
-            home_score_ct
+            bat,            # (BATCH_SIZE, emb_dim)
+            start_pit,
+            fld_team,
+            base1_run,
+            base2_run,
+            base3_run
         ], dim=1)
 
-        state = self.dynamic_representation(representation_input)
-        return state
+        values = self.small_in(values)
 
-    def forward(self, static_state, dynamic_state):
+        values = self.shared(values)
+
+        event_runs_ct = self.event_runs_ct(values)
+        event_outs_ct = self.event_outs_ct(values)
+        bat_dest = self.bat_dest(values)
+        run1_dest = self.run1_dest(values)
+        run2_dest = self.run2_dest(values)
+        run3_dest = self.run3_dest(values)
+
+        return event_runs_ct, event_outs_ct, \
+            bat_dest, run1_dest, run2_dest, run3_dest
+
+    def prediction(
+        self,
+        away_score_ct,        # (BATCH_SIZE, 1)
+        home_score_ct,
+        inn_ct,
+        bat_home_id,
+        outs_ct,
+        bat_id,
+        start_pit_id,
+        fld_team_id,
+        base1_run_id,
+        base2_run_id,
+        base3_run_id,
+        away_start_bats_ids,  # (BATCH_SIZE, 9)
+        home_start_bats_ids,
+        away_start_pit_id,    # (BATCH_SIZE, 1)
+        home_start_pit_id,
+        away_team_id,
+        home_team_id
+    ):
         '''
         Returns:
-            next_dynamic_state,
-            reward,
-            done,
-            value_away,
-            value_home
+            value_away (BATCH_SIZE, 1),
+            value_home (BATCH_SIZE, 1)
         '''
-        state = torch.cat([static_state, dynamic_state], dim=1)
-        dynamics_output = self.dynamics(state)
-        next_dynamic_state = self.next_dynamic_state(dynamics_output)
-        reward = self.reward(dynamics_output)
-        done = self.done(dynamics_output)
+        bat = self.bat_emb(bat_id).squeeze()
+        start_pit = self.pit_emb(start_pit_id).squeeze()
+        fld_team = self.team_emb(fld_team_id).squeeze()
+        base1_run = self.bat_emb(base1_run_id).squeeze()
+        base2_run = self.bat_emb(base2_run_id).squeeze()
+        base3_run = self.bat_emb(base3_run_id).squeeze()
+        away_start_bats = self.bat_emb(away_start_bats_ids).reshape(-1, 9 * self.emb_dim)
+        home_start_bats = self.bat_emb(home_start_bats_ids).reshape(-1, 9 * self.emb_dim)
+        away_start_pit = self.pit_emb(away_start_pit_id).squeeze()
+        home_start_pit = self.pit_emb(home_start_pit_id).squeeze()
+        away_team = self.team_emb(away_team_id).squeeze()
+        home_team = self.team_emb(home_team_id).squeeze()
 
-        prediction_output = self.prediction(state)
-        value_away = prediction_output[:, :1]
-        value_home = prediction_output[:, 1:]
+        values = torch.cat([
+            away_score_ct,    # (BATCH_SIZE, 1)
+            home_score_ct,
+            inn_ct,
+            bat_home_id,
+            outs_ct,
+            bat,              # (BATCH_SIZE, emb_dim)
+            start_pit,
+            fld_team,
+            base1_run,
+            base2_run,
+            base3_run,
+            away_start_bats,  # (BATCH_SIZE, 9 * emb_dim)
+            home_start_bats,
+            away_start_pit,   # (BATCH_SIZE, emb_dim)
+            home_start_pit,
+            away_team,
+            home_team
+        ], dim=1)
 
-        return next_dynamic_state, reward, done, value_away, value_home
+        values = self.big_in(values)
+
+        values = self.shared(values)
+
+        value_away = self.value_away(values)
+        value_home = self.value_home(values)
+
+        return value_away, value_home
