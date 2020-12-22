@@ -22,7 +22,7 @@ class Model(nn.Module):
             nn.Dropout(self.dropout)
         )
         self.big_in = nn.Sequential(
-            nn.Linear(5 + 27 * self.emb_dim, 512),
+            nn.Linear(5 + 28 * self.emb_dim, 512),
             nn.ReLU(),
             nn.Dropout(self.dropout)
         )
