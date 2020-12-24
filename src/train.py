@@ -134,6 +134,8 @@ def train_prediction():
         # Training
         model.train()
         sum_loss = 0.
+        negative = 0
+        positive = 0
         true_negative = 0
         true_positive = 0
         for features, targets in trainloader:
@@ -168,6 +170,8 @@ def train_prediction():
                 MSELoss(value_away, targets['value_away'].to(device)) + \
                 MSELoss(value_home, targets['value_home'].to(device))
             sum_loss += value_away.shape[0] * loss.item()
+            negative += (targets['value_away'] > targets['value_home']).sum().item()
+            positive += (targets['value_away'] < targets['value_home']).sum().item()
             true_negative += torch.logical_and(value_away.cpu() > value_home.cpu(),
                 targets['value_away'] > targets['value_home']).sum().item()
             true_positive += torch.logical_and(value_away.cpu() < value_home.cpu(),
@@ -177,13 +181,15 @@ def train_prediction():
             optimizer.step()
             scheduler.step()
         tb.add_scalar('train loss', sum_loss / len(trainloader.dataset), epoch)
-        tb.add_scalar('train TN', true_negative / len(trainloader.dataset), epoch)
-        tb.add_scalar('train TP', true_positive / len(trainloader.dataset), epoch)
-        tb.add_scalar('train acc.', (true_negative + true_positive) / len(trainloader.dataset), epoch)
+        tb.add_scalar('train TNR', true_negative / negative, epoch)
+        tb.add_scalar('train TPR', true_positive / positive, epoch)
+        tb.add_scalar('train acc.', (true_negative + true_positive) / (positive + negative), epoch)
 
         # Validation
         model.eval()
         sum_loss = 0.
+        negative = 0
+        positive = 0
         true_negative = 0
         true_positive = 0
         for features, targets in validloader:
@@ -218,15 +224,19 @@ def train_prediction():
                 MSELoss(value_away, targets['value_away'].to(device)) + \
                 MSELoss(value_home, targets['value_home'].to(device))
             sum_loss += value_away.shape[0] * loss.item()
+            negative += (targets['value_away'] > targets['value_home']).sum().item()
+            positive += (targets['value_away'] < targets['value_home']).sum().item()
             true_negative += torch.logical_and(value_away.cpu() > value_home.cpu(),
                 targets['value_away'] > targets['value_home']).sum().item()
             true_positive += torch.logical_and(value_away.cpu() < value_home.cpu(),
                 targets['value_away'] < targets['value_home']).sum().item()
         tb.add_scalar('valid loss', sum_loss / len(validloader.dataset), epoch)
-        tb.add_scalar('valid TN', true_negative / len(validloader.dataset), epoch)
-        tb.add_scalar('valid TP', true_positive / len(validloader.dataset), epoch)
-        tb.add_scalar('valid acc.', (true_negative + true_positive) / len(validloader.dataset), epoch)
+        tb.add_scalar('valid TNR', true_negative / negative, epoch)
+        tb.add_scalar('valid TPR', true_positive / positive, epoch)
+        tb.add_scalar('valid acc.', (true_negative + true_positive) / (positive + negative), epoch)
 
+        negative = 0
+        positive = 0
         true_negative = 0
         true_positive = 0
         for features, targets in vnewloader:
@@ -257,13 +267,15 @@ def train_prediction():
                 features['away_team_id'].to(device),
                 features['home_team_id'].to(device)
             )
+            negative += (targets['value_away'] > targets['value_home']).sum().item()
+            positive += (targets['value_away'] < targets['value_home']).sum().item()
             true_negative += torch.logical_and(value_away.cpu() > value_home.cpu(),
                 targets['value_away'] > targets['value_home']).sum().item()
             true_positive += torch.logical_and(value_away.cpu() < value_home.cpu(),
                 targets['value_away'] < targets['value_home']).sum().item()
-        tb.add_scalar('vnew TN', true_negative / len(vnewloader.dataset), epoch)
-        tb.add_scalar('vnew TP', true_positive / len(vnewloader.dataset), epoch)
-        tb.add_scalar('vnew acc.', (true_negative + true_positive) / len(vnewloader.dataset), epoch)
+        tb.add_scalar('vnew TNR', true_negative / negative, epoch)
+        tb.add_scalar('vnew TPR', true_positive / positive, epoch)
+        tb.add_scalar('vnew acc.', (true_negative + true_positive) / (positive + negative), epoch)
 
         # Save the best model.
         if sum_loss / len(validloader.dataset) < best_loss:
@@ -294,6 +306,8 @@ def train():
         # Training
         model.train()
         sum_loss = 0.
+        negative = 0
+        positive = 0
         true_negative = 0
         true_positive = 0
         for features, targets in trainloader:
@@ -341,6 +355,8 @@ def train():
                 MSELoss(value_away, targets['value_away'].to(device)) + \
                 MSELoss(value_home, targets['value_home'].to(device))
             sum_loss += event_runs_ct.shape[0] * loss.item()
+            negative += (targets['value_away'] > targets['value_home']).sum().item()
+            positive += (targets['value_away'] < targets['value_home']).sum().item()
             true_negative += torch.logical_and(value_away.cpu() > value_home.cpu(),
                 targets['value_away'] > targets['value_home']).sum().item()
             true_positive += torch.logical_and(value_away.cpu() < value_home.cpu(),
@@ -350,15 +366,19 @@ def train():
             optimizer.step()
             scheduler.step()
         tb.add_scalar('train loss', sum_loss / len(trainloader.dataset), epoch)
-        tb.add_scalar('train TN', true_negative / len(trainloader.dataset), epoch)
-        tb.add_scalar('train TP', true_positive / len(trainloader.dataset), epoch)
-        tb.add_scalar('train acc.', (true_negative + true_positive) / len(trainloader.dataset), epoch)
+        tb.add_scalar('train TNR', true_negative / negative, epoch)
+        tb.add_scalar('train TPR', true_positive / positive, epoch)
+        tb.add_scalar('train acc.', (true_negative + true_positive) / (positive + negative), epoch)
 
         # Validation
         model.eval()
         sum_loss = 0.
+        negative = 0
+        positive = 0
         true_negative = 0
         true_positive = 0
+        all_event_runs = []
+        all_event_outs = []
         for features, targets in validloader:
             fld_team_id = features['away_team_id'].where(
                 features['bat_home_id'].type(torch.long) == 1,
@@ -404,15 +424,25 @@ def train():
                 MSELoss(value_away, targets['value_away'].to(device)) + \
                 MSELoss(value_home, targets['value_home'].to(device))
             sum_loss += event_runs_ct.shape[0] * loss.item()
+            negative += (targets['value_away'] > targets['value_home']).sum().item()
+            positive += (targets['value_away'] < targets['value_home']).sum().item()
             true_negative += torch.logical_and(value_away.cpu() > value_home.cpu(),
                 targets['value_away'] > targets['value_home']).sum().item()
             true_positive += torch.logical_and(value_away.cpu() < value_home.cpu(),
                 targets['value_away'] < targets['value_home']).sum().item()
+            all_event_runs.append(event_runs_ct)
+            all_event_outs.append(event_outs_ct)
         tb.add_scalar('valid loss', sum_loss / len(validloader.dataset), epoch)
-        tb.add_scalar('valid TN', true_negative / len(validloader.dataset), epoch)
-        tb.add_scalar('valid TP', true_positive / len(validloader.dataset), epoch)
-        tb.add_scalar('valid acc.', (true_negative + true_positive) / len(validloader.dataset), epoch)
+        tb.add_scalar('valid TNR', true_negative / negative, epoch)
+        tb.add_scalar('valid TPR', true_positive / positive, epoch)
+        tb.add_scalar('valid acc.', (true_negative + true_positive) / (positive + negative), epoch)
+        all_event_runs = torch.cat(all_event_runs, dim=0)
+        all_event_outs = torch.cat(all_event_outs, dim=0)
+        tb.add_histogram('valid event runs', all_event_runs, epoch)
+        tb.add_histogram('valid event outs', all_event_outs, epoch)
 
+        negative = 0
+        positive = 0
         true_negative = 0
         true_positive = 0
         for features, targets in vnewloader:
@@ -450,13 +480,15 @@ def train():
                 features['away_team_id'].to(device),
                 features['home_team_id'].to(device)
             )
+            negative += (targets['value_away'] > targets['value_home']).sum().item()
+            positive += (targets['value_away'] < targets['value_home']).sum().item()
             true_negative += torch.logical_and(value_away.cpu() > value_home.cpu(),
                 targets['value_away'] > targets['value_home']).sum().item()
             true_positive += torch.logical_and(value_away.cpu() < value_home.cpu(),
                 targets['value_away'] < targets['value_home']).sum().item()
-        tb.add_scalar('vnew TN', true_negative / len(vnewloader.dataset), epoch)
-        tb.add_scalar('vnew TP', true_positive / len(vnewloader.dataset), epoch)
-        tb.add_scalar('vnew acc.', (true_negative + true_positive) / len(vnewloader.dataset), epoch)
+        tb.add_scalar('vnew TNR', true_negative / negative, epoch)
+        tb.add_scalar('vnew TPR', true_positive / positive, epoch)
+        tb.add_scalar('vnew acc.', (true_negative + true_positive) / (positive + negative), epoch)
 
         # Save the best model.
         if sum_loss / len(validloader.dataset) < best_loss:
@@ -477,11 +509,11 @@ if __name__ == "__main__":
     parser.add_argument('--rl', action='store_true')
     parser.add_argument('--dropout', type=float, default=0.0, metavar='F')
     parser.add_argument('--l2', type=float, default=1e-3, metavar='F')
-    parser.add_argument('--lr', type=float, default=1e-5, metavar='F')
+    parser.add_argument('--lr', type=float, default=5e-6, metavar='F')
     parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
     parser.add_argument('--warmup', type=int, default=2000, metavar='N')
     parser.add_argument('--batch-size', type=int, default=512, metavar='N')
-    parser.add_argument('--epochs', type=int, default=25, metavar='N')
+    parser.add_argument('--epochs', type=int, default=30, metavar='N')
     parser.add_argument('--seed', type=int, default=777, metavar='N')
     parser.add_argument('--cuda', type=int, default=0, metavar='N')
     args = parser.parse_args()
@@ -509,18 +541,19 @@ if __name__ == "__main__":
     train_games = pd.concat(train_games, ignore_index=True)
     valid_games = pd.concat(valid_games, ignore_index=True)
     test_games = pd.concat(test_games, ignore_index=True)
-    vnew_games = valid_games[valid_games['GAME_NEW_FL'] == 'T'].reset_index(drop=True)
+    # vnew_games = valid_games[valid_games['GAME_NEW_FL'] == 'T'].reset_index(drop=True)
+    vnew_games = valid_games[valid_games['INN_CT'] >= 7].reset_index(drop=True)  # 7회 이후만
 
     # Dataset and dataloader
     trainset = BaseballDataset(train_games)
     validset = BaseballDataset(valid_games)
     vnewset = BaseballDataset(vnew_games)
     trainloader = torch.utils.data.DataLoader(trainset,
-        batch_size=args.batch_size, shuffle=True, num_workers=32)
+        batch_size=args.batch_size, shuffle=True, num_workers=16)
     validloader = torch.utils.data.DataLoader(validset,
-        batch_size=args.batch_size, shuffle=False, num_workers=32)
+        batch_size=args.batch_size, shuffle=False, num_workers=16)
     vnewloader = torch.utils.data.DataLoader(vnewset,
-        batch_size=args.batch_size, shuffle=False, num_workers=1)
+        batch_size=args.batch_size, shuffle=False, num_workers=16)
 
     model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout).to(device)
 
@@ -542,7 +575,7 @@ if __name__ == "__main__":
         train()
         tb.close()
 
-    if not args.rl:
+    if args.rl:
         tb = SummaryWriter(f'../runs/{"rl_" + tag}')
         td_zero()
         tb.close()
