@@ -115,7 +115,9 @@ def train_dynamics():
 def train_prediction():
     if not args.dynamics:
         pretrained_model_path = get_latest_file_path('../models', 'dynamics')
-        model.load_state_dict(torch.load(pretrained_model_path))
+    else:
+        pretrained_model_path = f'../models/dynamics_{tag}.pt'
+    model.load_state_dict(torch.load(pretrained_model_path))
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-5, weight_decay=args.l2)
 
@@ -288,7 +290,9 @@ def train_prediction():
 def train():
     if not args.prediction:
         pretrained_model_path = get_latest_file_path('../models', 'prediction')
-        model.load_state_dict(torch.load(pretrained_model_path))
+    else:
+        pretrained_model_path = f'../models/prediction_{tag}.pt'
+    model.load_state_dict(torch.load(pretrained_model_path))
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
 
@@ -512,7 +516,7 @@ if __name__ == "__main__":
     parser.add_argument('--dropout', type=float, default=0.0, metavar='F')
     parser.add_argument('--l2', type=float, default=1e-3, metavar='F')
     parser.add_argument('--lr', type=float, default=5e-6, metavar='F')
-    parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
+    parser.add_argument('--emb-dim', type=int, default=16, metavar='N')
     parser.add_argument('--warmup', type=int, default=2000, metavar='N')
     parser.add_argument('--batch-size', type=int, default=512, metavar='N')
     parser.add_argument('--epochs', type=int, default=30, metavar='N')
