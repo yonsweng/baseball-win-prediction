@@ -113,8 +113,9 @@ def train_dynamics():
 
 
 def train_prediction():
-    pretrained_model_path = get_latest_file_path('../models', 'dynamics')
-    model.load_state_dict(torch.load(pretrained_model_path))
+    if not args.dynamics:
+        pretrained_model_path = get_latest_file_path('../models', 'dynamics')
+        model.load_state_dict(torch.load(pretrained_model_path))
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-5, weight_decay=args.l2)
 
@@ -285,8 +286,9 @@ def train_prediction():
 
 
 def train():
-    pretrained_model_path = get_latest_file_path('../models', 'prediction')
-    model.load_state_dict(torch.load(pretrained_model_path))
+    if not args.prediction:
+        pretrained_model_path = get_latest_file_path('../models', 'prediction')
+        model.load_state_dict(torch.load(pretrained_model_path))
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
 
@@ -541,8 +543,8 @@ if __name__ == "__main__":
     train_games = pd.concat(train_games, ignore_index=True)
     valid_games = pd.concat(valid_games, ignore_index=True)
     test_games = pd.concat(test_games, ignore_index=True)
-    # vnew_games = valid_games[valid_games['GAME_NEW_FL'] == 'T'].reset_index(drop=True)
-    vnew_games = valid_games[valid_games['INN_CT'] >= 7].reset_index(drop=True)  # 7회 이후만
+    vnew_games = valid_games[valid_games['GAME_NEW_FL'] == 'T'].reset_index(drop=True)
+    # vnew_games = valid_games[valid_games['INN_CT'] >= 7].reset_index(drop=True)  # 7회 이후만
 
     # Dataset and dataloader
     trainset = BaseballDataset(train_games)

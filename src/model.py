@@ -18,13 +18,11 @@ class Model(nn.Module):
         # Input layers
         self.small_in = nn.Sequential(
             nn.Linear(5 + 6 * self.emb_dim, 512),
-            nn.ReLU(),
-            nn.Dropout(self.dropout)
+            nn.ReLU()
         )
         self.big_in = nn.Sequential(
             nn.Linear(5 + 28 * self.emb_dim, 512),
-            nn.ReLU(),
-            nn.Dropout(self.dropout)
+            nn.ReLU()
         )
 
         # Shared layer
