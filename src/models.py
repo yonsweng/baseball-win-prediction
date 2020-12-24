@@ -35,10 +35,10 @@ class Dense(nn.Module):
         self.dense = nn.Sequential(
             nn.Linear(512, 256),
             nn.ReLU(),
-            nn.Dropout(self.dropout),
+            nn.Dropout(dropout),
             nn.Linear(256, 128),
             nn.ReLU(),
-            nn.Dropout(self.dropout),
+            nn.Dropout(dropout),
         )
 
     def forward(self, x):
@@ -49,24 +49,20 @@ class Dynamics(nn.Module):
     def __init__(self, num_bats, num_pits, num_teams, emb_dim, dropout):
         super().__init__()
 
-        # Model parameters
-        self.emb_dim = emb_dim
-        self.dropout = dropout
-
         # Embedding layers
-        self.bat_emb = BatEmb(num_bats, self.emb_dim)
-        self.pit_emb = PitEmb(num_pits, self.emb_dim)
-        self.team_emb = TeamEmb(num_teams, self.emb_dim)
+        self.bat_emb = BatEmb(num_bats, emb_dim)
+        self.pit_emb = PitEmb(num_pits, emb_dim)
+        self.team_emb = TeamEmb(num_teams, emb_dim)
 
         # Input layers
         self.plate_in = nn.Sequential(
-            nn.Linear(5 + 6 * self.emb_dim, 512),
+            nn.Linear(5 + 6 * emb_dim, 512),
             nn.ReLU(),
             nn.Dropout(dropout)
         )
 
         # Shared layers
-        self.dense = Dense(self.dropout)
+        self.dense = Dense(dropout)
 
         # Output layers
         self.bat_dest = nn.Linear(128, 5)
@@ -138,24 +134,20 @@ class Prediction(nn.Module):
     def __init__(self, num_bats, num_pits, num_teams, emb_dim, dropout):
         super().__init__()
 
-        # Model parameters
-        self.emb_dim = emb_dim
-        self.dropout = dropout
-
         # Embedding layers
-        self.bat_emb = BatEmb(num_bats, self.emb_dim)
-        self.pit_emb = PitEmb(num_pits, self.emb_dim)
-        self.team_emb = TeamEmb(num_teams, self.emb_dim)
+        self.bat_emb = BatEmb(num_bats, emb_dim)
+        self.pit_emb = PitEmb(num_pits, emb_dim)
+        self.team_emb = TeamEmb(num_teams, emb_dim)
 
         # Input layers
         self.game_in = nn.Sequential(
-            nn.Linear(5 + 28 * self.emb_dim, 512),
+            nn.Linear(5 + 28 * emb_dim, 512),
             nn.ReLU(),
             nn.Dropout(dropout)
         )
 
         # Shared layers
-        self.dense = Dense(self.dropout)
+        self.dense = Dense(dropout)
 
         # Output layers
         self.value_away = nn.Linear(128, 1)
@@ -192,8 +184,10 @@ class Prediction(nn.Module):
         base1_run = self.bat_emb(base1_run_id).squeeze()
         base2_run = self.bat_emb(base2_run_id).squeeze()
         base3_run = self.bat_emb(base3_run_id).squeeze()
-        away_start_bats = self.bat_emb(away_start_bats_ids).reshape(-1, 9 * self.emb_dim)
-        home_start_bats = self.bat_emb(home_start_bats_ids).reshape(-1, 9 * self.emb_dim)
+        away_start_bats = self.bat_emb(away_start_bats_ids).reshape(
+            away_start_bats_ids.shape[0], -1)
+        home_start_bats = self.bat_emb(home_start_bats_ids).reshape(
+            home_start_bats_ids.shape[0], -1)
         away_start_pit = self.pit_emb(away_start_pit_id).squeeze()
         home_start_pit = self.pit_emb(home_start_pit_id).squeeze()
         away_team = self.team_emb(away_team_id).squeeze()
