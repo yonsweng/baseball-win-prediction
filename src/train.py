@@ -14,7 +14,7 @@ from utils import count_numbers, get_latest_file_path, get_next_bats
 
 
 def train_dynamics():
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=args.l2)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0.)
 
     MSELoss = torch.nn.MSELoss()
     CELoss = torch.nn.CrossEntropyLoss()
@@ -25,6 +25,7 @@ def train_dynamics():
     clip = lambda x: x.where(x <= 4, torch.tensor([4], dtype=torch.long))
 
     best_loss = 9.9
+    early_stopping = 0
 
     for epoch in range(args.epochs):
         print(f'epoch {epoch}')
@@ -110,6 +111,11 @@ def train_dynamics():
             best_loss = sum_loss / len(validloader.dataset)
             torch.save(model.state_dict(), f'../models/dynamics_{tag}.pt')
             print('model saved.')
+            early_stopping_cnt = 0
+        else:
+            early_stopping_cnt += 1
+            if early_stopping_cnt > PATIENCE:
+                break
 
 
 def train_prediction():
@@ -119,7 +125,7 @@ def train_prediction():
         pretrained_model_path = f'../models/dynamics_{tag}.pt'
     model.load_state_dict(torch.load(pretrained_model_path))
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5, weight_decay=args.l2)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5, weight_decay=0.)
 
     MSELoss = torch.nn.MSELoss()
     CELoss = torch.nn.CrossEntropyLoss()
@@ -130,6 +136,7 @@ def train_prediction():
     clip = lambda x: x.where(x <= 4, torch.tensor([4], dtype=torch.long))
 
     best_loss = 99.9
+    early_stopping = 0
 
     for epoch in range(args.epochs):
         print(f'epoch {epoch}')
@@ -285,6 +292,11 @@ def train_prediction():
             best_loss = sum_loss / len(validloader.dataset)
             torch.save(model.state_dict(), f'../models/prediction_{tag}.pt')
             print('model saved.')
+            early_stopping_cnt = 0
+        else:
+            early_stopping_cnt += 1
+            if early_stopping_cnt > PATIENCE:
+                break
 
 
 def train():
@@ -305,6 +317,7 @@ def train():
     clip = lambda x: x.where(x <= 4, torch.tensor([4], dtype=torch.long))
 
     best_loss = 99.9
+    early_stopping_cnt = 0
 
     for epoch in range(args.epochs):
         print(f'epoch {epoch}')
@@ -501,6 +514,11 @@ def train():
             best_loss = sum_loss / len(validloader.dataset)
             torch.save(model.state_dict(), f'../models/trained_{tag}.pt')
             print('model saved.')
+            early_stopping_cnt = 0
+        else:
+            early_stopping_cnt += 1
+            if early_stopping_cnt > PATIENCE:
+                break
 
 
 def td_zero():
@@ -514,7 +532,7 @@ if __name__ == "__main__":
     parser.add_argument('--no-train', action='store_true')
     parser.add_argument('--rl', action='store_true')
     parser.add_argument('--dropout', type=float, default=0.2, metavar='F')
-    parser.add_argument('--l2', type=float, default=1e-3, metavar='F')
+    parser.add_argument('--l2', type=float, default=1e-1, metavar='F')
     parser.add_argument('--lr', type=float, default=5e-6, metavar='F')
     parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
     parser.add_argument('--warmup', type=int, default=2000, metavar='N')
@@ -527,6 +545,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     device = torch.device(f'cuda:{args.cuda}')
+    PATIENCE = 3
 
     # Load data
     PREPROCESSED_PATH = '../input/preprocessed/all2010.csv'
