@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class Model(nn.Module):
@@ -16,14 +17,8 @@ class Model(nn.Module):
         self.team_emb = nn.Embedding(num_teams, self.emb_dim)
 
         # Input layers
-        self.small_in = nn.Sequential(
-            nn.Linear(5 + 6 * self.emb_dim, 512),
-            nn.ReLU()
-        )
-        self.big_in = nn.Sequential(
-            nn.Linear(5 + 28 * self.emb_dim, 512),
-            nn.ReLU()
-        )
+        self.pa_in = nn.Linear(5 + 6 * self.emb_dim, 512)
+        self.game_in = nn.Linear(22 * self.emb_dim, 512, bias=False)
 
         # Shared layer
         self.shared = nn.Sequential(
@@ -89,7 +84,7 @@ class Model(nn.Module):
             base3_run
         ], dim=1)
 
-        values = self.small_in(values)
+        values = F.relu(self.pa_in(values))
 
         values = self.shared(values)
 
@@ -141,7 +136,7 @@ class Model(nn.Module):
         away_team = self.team_emb(away_team_id).squeeze()
         home_team = self.team_emb(home_team_id).squeeze()
 
-        values = torch.cat([
+        values_pa = torch.cat([
             away_score_ct,    # (BATCH_SIZE, 1)
             home_score_ct,
             inn_ct,
@@ -152,7 +147,10 @@ class Model(nn.Module):
             fld_team,
             base1_run,
             base2_run,
-            base3_run,
+            base3_run
+        ], dim=1)
+
+        values_game = torch.cat([
             away_start_bats,  # (BATCH_SIZE, 9 * emb_dim)
             home_start_bats,
             away_start_pit,   # (BATCH_SIZE, emb_dim)
@@ -161,7 +159,7 @@ class Model(nn.Module):
             home_team
         ], dim=1)
 
-        values = self.big_in(values)
+        values = F.relu(self.pa_in(values_pa) + self.game_in(values_game))
 
         values = self.shared(values)
 
@@ -214,7 +212,7 @@ class Model(nn.Module):
         away_team = self.team_emb(away_team_id).squeeze()
         home_team = self.team_emb(home_team_id).squeeze()
 
-        values = torch.cat([
+        values_pa = torch.cat([
             away_score_ct,    # (BATCH_SIZE, 1)
             home_score_ct,
             inn_ct,
@@ -225,7 +223,10 @@ class Model(nn.Module):
             fld_team,
             base1_run,
             base2_run,
-            base3_run,
+            base3_run
+        ], dim=1)
+
+        values_game = torch.cat([
             away_start_bats,  # (BATCH_SIZE, 9 * emb_dim)
             home_start_bats,
             away_start_pit,   # (BATCH_SIZE, emb_dim)
@@ -234,7 +235,7 @@ class Model(nn.Module):
             home_team
         ], dim=1)
 
-        values = self.big_in(values)
+        values = F.relu(self.pa_in(values_pa) + self.game_in(values_game))
 
         values = self.shared(values)
 
