@@ -14,7 +14,7 @@ from utils import count_numbers, get_latest_file_path, get_next_bats
 
 
 def train_dynamics():
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0.)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=args.l2)
 
     MSELoss = torch.nn.MSELoss()
     CELoss = torch.nn.CrossEntropyLoss()
@@ -125,7 +125,7 @@ def train_prediction():
         pretrained_model_path = f'../models/dynamics_{tag}.pt'
     model.load_state_dict(torch.load(pretrained_model_path))
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5, weight_decay=0.)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5, weight_decay=args.l2)
 
     MSELoss = torch.nn.MSELoss()
     CELoss = torch.nn.CrossEntropyLoss()
