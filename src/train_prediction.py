@@ -85,6 +85,7 @@ def train():
         tb.add_scalar('train TNR', true_negative / negative, epoch)
         tb.add_scalar('train TPR', true_positive / positive, epoch)
         tb.add_scalar('train acc.', (true_negative + true_positive) / (positive + negative), epoch)
+        tb.add_scalar('lr', scheduler.get_last_lr()[0], epoch)
 
         # Validation
         model.eval()
@@ -197,9 +198,9 @@ if __name__ == "__main__":
     parser.add_argument('--l2', type=float, default=1e-3, metavar='F')
     parser.add_argument('--lr', type=float, default=1e-5, metavar='F')
     parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
-    parser.add_argument('--warmup', type=int, default=2000, metavar='N')
+    parser.add_argument('--warmup', type=int, default=1000, metavar='N')
     parser.add_argument('--batch-size', type=int, default=512, metavar='N')
-    parser.add_argument('--epochs', type=int, default=30, metavar='N')
+    parser.add_argument('--epochs', type=int, default=50, metavar='N')
     parser.add_argument('--patience', type=int, default=3, metavar='N')
     parser.add_argument('--seed', type=int, default=777, metavar='N')
     parser.add_argument('--workers', type=int, default=16, metavar='N')
