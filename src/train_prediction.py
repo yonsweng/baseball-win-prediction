@@ -16,21 +16,36 @@ def train():
     model.team_emb.load_state_dict(dynamics.team_emb.state_dict())
     model.dense.load_state_dict(dynamics.dense.state_dict())
 
+    # Freeze
+    freeze_params = [
+        model.bat_emb.parameters(),
+        model.pit_emb.parameters(),
+        model.team_emb.parameters(),
+        model.dense.parameters()
+    ]
+    for params in freeze_params:
+        for param in params:
+            param.requires_grad = False
+
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
 
     MSELoss = torch.nn.MSELoss()
     CELoss = torch.nn.CrossEntropyLoss()
 
     lr_lambda = lambda x: x / args.warmup if x <= args.warmup else (x / args.warmup) ** -0.5
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
     clip = lambda x: x.where(x <= 4, torch.tensor([4], dtype=torch.long))
 
-    best_loss = 99.9
+    best_acc = 0.
     early_stopping = 0
 
     for epoch in range(args.epochs):
         print(f'epoch {epoch}')
+
+        if epoch == args.freeze:  # Unfreeze after args.freeze epochs
+            for param in model.parameters():
+                param.requires_grad = True
 
         # Training
         model.train()
@@ -80,12 +95,12 @@ def train():
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            scheduler.step()
+            # scheduler.step()
         tb.add_scalar('train loss', sum_loss / len(trainloader.dataset), epoch)
         tb.add_scalar('train TNR', true_negative / negative, epoch)
         tb.add_scalar('train TPR', true_positive / positive, epoch)
         tb.add_scalar('train acc.', (true_negative + true_positive) / (positive + negative), epoch)
-        tb.add_scalar('lr', scheduler.get_last_lr()[0], epoch)
+        # tb.add_scalar('lr', scheduler.get_last_lr()[0], epoch)
 
         # Validation
         model.eval()
@@ -135,7 +150,8 @@ def train():
         tb.add_scalar('valid loss', sum_loss / len(validloader.dataset), epoch)
         tb.add_scalar('valid TNR', true_negative / negative, epoch)
         tb.add_scalar('valid TPR', true_positive / positive, epoch)
-        tb.add_scalar('valid acc.', (true_negative + true_positive) / (positive + negative), epoch)
+        valid_acc = (true_negative + true_positive) / (positive + negative)
+        tb.add_scalar('valid acc.', valid_acc, epoch)
 
         negative = 0
         positive = 0
@@ -180,8 +196,8 @@ def train():
         tb.add_scalar('vnew acc.', (true_negative + true_positive) / (positive + negative), epoch)
 
         # Save the best model.
-        if sum_loss / len(validloader.dataset) < best_loss:
-            best_loss = sum_loss / len(validloader.dataset)
+        if valid_acc > best_acc:
+            best_acc = valid_acc
             torch.save(model.state_dict(), f'../models/{PREFIX}/{tag}.pt')
             print('model saved.')
             early_stopping_cnt = 0
@@ -194,12 +210,13 @@ def train():
 if __name__ == "__main__":
     PREFIX = 'prediction'
     parser = argparse.ArgumentParser()  # 자주 바뀌는 순.
+    parser.add_argument('--freeze', type=int, default=5, metavar='N')
     parser.add_argument('--dropout', type=float, default=0.2, metavar='F')
-    parser.add_argument('--l2', type=float, default=1e-3, metavar='F')
-    parser.add_argument('--lr', type=float, default=1e-5, metavar='F')
+    parser.add_argument('--l2', type=float, default=1e-1, metavar='F')
+    parser.add_argument('--lr', type=float, default=1e-4, metavar='F')
     parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
-    parser.add_argument('--warmup', type=int, default=1000, metavar='N')
-    parser.add_argument('--batch-size', type=int, default=512, metavar='N')
+    parser.add_argument('--warmup', type=int, default=200, metavar='N')
+    parser.add_argument('--batch-size', type=int, default=2048, metavar='N')
     parser.add_argument('--epochs', type=int, default=50, metavar='N')
     parser.add_argument('--patience', type=int, default=3, metavar='N')
     parser.add_argument('--seed', type=int, default=777, metavar='N')
