@@ -60,6 +60,7 @@ def train():
             optimizer.step()
             scheduler.step()
         tb.add_scalar('train loss', sum_loss / len(trainloader.dataset), epoch)
+        tb.add_scalar('lr', scheduler.get_last_lr()[0], epoch)
 
         # Validation
         model.eval()
@@ -113,12 +114,12 @@ if __name__ == "__main__":
     PREFIX = 'dynamics'
     parser = argparse.ArgumentParser()  # 자주 바뀌는 순.
     parser.add_argument('--dropout', type=float, default=0.2, metavar='F')
-    parser.add_argument('--l2', type=float, default=1e-3, metavar='F')
-    parser.add_argument('--lr', type=float, default=1e-3, metavar='F')
+    parser.add_argument('--l2', type=float, default=1e-4, metavar='F')
+    parser.add_argument('--lr', type=float, default=1e-4, metavar='F')
+    parser.add_argument('--warmup', type=int, default=1000, metavar='N')
     parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
-    parser.add_argument('--warmup', type=int, default=2000, metavar='N')
     parser.add_argument('--batch-size', type=int, default=512, metavar='N')
-    parser.add_argument('--epochs', type=int, default=30, metavar='N')
+    parser.add_argument('--epochs', type=int, default=50, metavar='N')
     parser.add_argument('--patience', type=int, default=3, metavar='N')
     parser.add_argument('--seed', type=int, default=777, metavar='N')
     parser.add_argument('--workers', type=int, default=16, metavar='N')
