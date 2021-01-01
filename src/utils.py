@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 from sklearn.model_selection import train_test_split
 import torch
-from dataset import BaseballDataset
+from .dataset import BaseballDataset
 
 
 def init(args):

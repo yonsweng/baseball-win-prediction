@@ -1,8 +1,11 @@
 import argparse
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from utils import init, load_data, count_numbers, get_dataloaders
-from models import Dynamics
+from src.dataset import *
+from src.models import *
+from src.preprocess import *
+from src.utils import *
+
 
 def train():
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
