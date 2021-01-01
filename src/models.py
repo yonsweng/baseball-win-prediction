@@ -33,10 +33,13 @@ class Dense(nn.Module):
     def __init__(self, dropout):
         super().__init__()
         self.dense = nn.Sequential(
-            nn.Linear(512, 256),
+            nn.Linear(8192, 2048),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(256, 128),
+            nn.Linear(2048, 2048),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(2048, 512),
             nn.ReLU(),
             nn.Dropout(dropout),
         )
@@ -56,7 +59,7 @@ class Dynamics(nn.Module):
 
         # Input layers
         self.plate_in = nn.Sequential(
-            nn.Linear(5 + 6 * emb_dim, 512),
+            nn.Linear(5 + 6 * emb_dim, 8192),
             nn.ReLU(),
             nn.Dropout(dropout)
         )
@@ -65,12 +68,10 @@ class Dynamics(nn.Module):
         self.dense = Dense(dropout)
 
         # Output layers
-        self.bat_dest = nn.Linear(128, 5)
-        self.run1_dest = nn.Linear(128, 5)
-        self.run2_dest = nn.Linear(128, 5)
-        self.run3_dest = nn.Linear(128, 5)
-        self.event_outs_ct = nn.Linear(128, 1)
-        self.event_runs_ct = nn.Linear(128, 1)
+        self.bat_dest = nn.Linear(512, 5)
+        self.run1_dest = nn.Linear(512, 5)
+        self.run2_dest = nn.Linear(512, 5)
+        self.run3_dest = nn.Linear(512, 5)
 
     def forward(
         self,
@@ -88,8 +89,6 @@ class Dynamics(nn.Module):
     ):
         '''
         Returns:
-            event_runs_ct (BATCH_SIZE, 1),
-            event_outs_ct (BATCH_SIZE, 1),
             bat_dest      (BATCH_SIZE, 5),
             run1_dest     (BATCH_SIZE, 5),
             run2_dest     (BATCH_SIZE, 5),
@@ -120,14 +119,12 @@ class Dynamics(nn.Module):
 
         values = self.dense(values)
 
-        event_runs_ct = self.event_runs_ct(values)
-        event_outs_ct = self.event_outs_ct(values)
         bat_dest = self.bat_dest(values)
         run1_dest = self.run1_dest(values)
         run2_dest = self.run2_dest(values)
         run3_dest = self.run3_dest(values)
 
-        return event_runs_ct, event_outs_ct, bat_dest, run1_dest, run2_dest, run3_dest
+        return bat_dest, run1_dest, run2_dest, run3_dest
 
 
 class Prediction(nn.Module):
