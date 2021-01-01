@@ -7,7 +7,6 @@ from models import Dynamics
 def train():
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
 
-    MSELoss = torch.nn.MSELoss()
     CELoss = torch.nn.CrossEntropyLoss()
 
     lr_lambda = lambda x: x / args.warmup if x <= args.warmup else (x / args.warmup) ** -0.5
@@ -29,8 +28,6 @@ def train():
                 features['bat_home_id'].type(torch.long) == 1,
                 features['home_team_id']
             )
-            event_runs_ct, \
-            event_outs_ct, \
             bat_dest, \
             run1_dest, \
             run2_dest, \
@@ -48,13 +45,11 @@ def train():
                 features['base3_run_id'].to(device)
             )
             loss = \
-                MSELoss(event_runs_ct, targets['event_runs_ct'].to(device)) + \
-                MSELoss(event_outs_ct, targets['event_outs_ct'].to(device)) + \
                 CELoss(bat_dest, clip(targets['bat_dest']).squeeze().to(device)) + \
                 CELoss(run1_dest, clip(targets['run1_dest']).squeeze().to(device)) + \
                 CELoss(run2_dest, clip(targets['run2_dest']).squeeze().to(device)) + \
                 CELoss(run3_dest, clip(targets['run3_dest']).squeeze().to(device))
-            sum_loss += event_runs_ct.shape[0] * loss.item()
+            sum_loss += bat_dest.shape[0] * loss.item()
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -65,13 +60,12 @@ def train():
         # Validation
         model.eval()
         sum_loss = 0.
+        bat_dest_true, run1_dest_true, run2_dest_true, run3_dest_true = 0, 0, 0, 0
         for features, targets in validloader:
             fld_team_id = features['away_team_id'].where(
                 features['bat_home_id'].type(torch.long) == 1,
                 features['home_team_id']
             )
-            event_runs_ct, \
-            event_outs_ct, \
             bat_dest, \
             run1_dest, \
             run2_dest, \
@@ -89,14 +83,21 @@ def train():
                 features['base3_run_id'].to(device)
             )
             loss = \
-                MSELoss(event_runs_ct, targets['event_runs_ct'].to(device)) + \
-                MSELoss(event_outs_ct, targets['event_outs_ct'].to(device)) + \
                 CELoss(bat_dest, clip(targets['bat_dest']).squeeze().to(device)) + \
                 CELoss(run1_dest, clip(targets['run1_dest']).squeeze().to(device)) + \
                 CELoss(run2_dest, clip(targets['run2_dest']).squeeze().to(device)) + \
                 CELoss(run3_dest, clip(targets['run3_dest']).squeeze().to(device))
-            sum_loss += event_runs_ct.shape[0] * loss.item()
+            sum_loss += bat_dest.shape[0] * loss.item()
+            # Calculate accuracies.
+            bat_dest_true += (bat_dest.cpu().argmax(dim=1) == clip(targets['bat_dest']).squeeze()).sum().item()
+            run1_dest_true += (run1_dest.cpu().argmax(dim=1) == clip(targets['run1_dest']).squeeze()).sum().item()
+            run2_dest_true += (run2_dest.cpu().argmax(dim=1) == clip(targets['run2_dest']).squeeze()).sum().item()
+            run3_dest_true += (run3_dest.cpu().argmax(dim=1) == clip(targets['run3_dest']).squeeze()).sum().item()
         tb.add_scalar('valid loss', sum_loss / len(validloader.dataset), epoch)
+        tb.add_scalar('valid bat_dest acc.', bat_dest_true / len(validloader.dataset), epoch)
+        tb.add_scalar('valid run1_dest acc.', run1_dest_true / len(validloader.dataset), epoch)
+        tb.add_scalar('valid run2_dest acc.', run2_dest_true / len(validloader.dataset), epoch)
+        tb.add_scalar('valid run3_dest acc.', run3_dest_true / len(validloader.dataset), epoch)
 
         # Save the best model.
         if sum_loss / len(validloader.dataset) < best_loss:
