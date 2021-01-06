@@ -5,6 +5,7 @@ from src.dataset import *
 from src.models import *
 from src.preprocess import *
 from src.utils import *
+from src.env import *
 
 
 def train():
@@ -105,7 +106,7 @@ def train():
         # Save the best model.
         if sum_loss / len(validloader.dataset) < best_loss:
             best_loss = sum_loss / len(validloader.dataset)
-            torch.save(model.state_dict(), f'../models/{PREFIX}/{tag}.pt')
+            torch.save(model.state_dict(), f'./models/{PREFIX}/{tag}.pt')
             print('model saved.')
             early_stopping_cnt = 0
         else:
@@ -119,7 +120,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()  # 자주 바뀌는 순.
     parser.add_argument('--dropout', type=float, default=0.2, metavar='F')
     parser.add_argument('--l2', type=float, default=1e-4, metavar='F')
-    parser.add_argument('--lr', type=float, default=1e-4, metavar='F')
+    parser.add_argument('--lr', type=float, default=1e-5, metavar='F')
     parser.add_argument('--warmup', type=int, default=1000, metavar='N')
     parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
     parser.add_argument('--batch-size', type=int, default=512, metavar='N')
@@ -133,9 +134,12 @@ if __name__ == "__main__":
     tag, device = init(args)
     data = load_data()
     num_bats, num_pits, num_teams = count_numbers(data)
-    trainloader, validloader, vnewloader = get_dataloaders(data, args)
+    trainloader, validloader, tnewloader, vnewloader = get_dataloaders(data, args)
 
+    from test import test
     model = Dynamics(num_bats, num_pits, num_teams, args.emb_dim, args.dropout).to(device)
-    tb = SummaryWriter(f'../runs/{PREFIX}_{tag}')
+    tb = SummaryWriter(f'./runs/{PREFIX}_{tag}')
     train()
     tb.close()
+    # model.load_state_dict(torch.load(get_latest_file_path('models/dynamics')))
+    # test(vnewloader, model, device)

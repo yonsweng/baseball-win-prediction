@@ -73,6 +73,10 @@ class Dynamics(nn.Module):
         self.run2_dest = nn.Linear(512, 5)
         self.run3_dest = nn.Linear(512, 5)
 
+        # Rewards
+        self.rewards = []
+        self.saved_log_probs = []
+
     def forward(
         self,
         away_score_ct,  # (BATCH_SIZE, 1)
@@ -94,12 +98,12 @@ class Dynamics(nn.Module):
             run2_dest     (BATCH_SIZE, 5),
             run3_dest     (BATCH_SIZE, 5)
         '''
-        bat = self.bat_emb(bat_id).squeeze()
-        start_pit = self.pit_emb(start_pit_id).squeeze()
-        fld_team = self.team_emb(fld_team_id).squeeze()
-        base1_run = self.bat_emb(base1_run_id).squeeze()
-        base2_run = self.bat_emb(base2_run_id).squeeze()
-        base3_run = self.bat_emb(base3_run_id).squeeze()
+        bat = self.bat_emb(bat_id).reshape(bat_id.shape[0], -1)
+        start_pit = self.pit_emb(start_pit_id).reshape(start_pit_id.shape[0], -1)
+        fld_team = self.team_emb(fld_team_id).reshape(fld_team_id.shape[0], -1)
+        base1_run = self.bat_emb(base1_run_id).reshape(base1_run_id.shape[0], -1)
+        base2_run = self.bat_emb(base2_run_id).reshape(base2_run_id.shape[0], -1)
+        base3_run = self.bat_emb(base3_run_id).reshape(base3_run_id.shape[0], -1)
 
         values = torch.cat([
             away_score_ct,  # (BATCH_SIZE, 1)
