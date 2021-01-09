@@ -31,7 +31,7 @@ parser.add_argument('--test-interval', type=int, default=300, metavar='N',
                     help='interval between tests (default: 200)')
 parser.add_argument('--dropout', type=float, default=0.5, metavar='F')
 parser.add_argument('--l2', type=float, default=0.0, metavar='F')
-parser.add_argument('--lr', type=float, default=1e-5, metavar='F')
+parser.add_argument('--lr', type=float, default=1e-6, metavar='F')
 parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
 parser.add_argument('--batch-size', type=int, default=1, metavar='N')
 parser.add_argument('--workers', type=int, default=4, metavar='N')
