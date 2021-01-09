@@ -2,50 +2,63 @@ import torch
 
 
 class Env():
-    def __init__(self, features, targets):
-        self.away_bat_ids = features['away_start_bat_ids'][0].tolist()
-        self.home_bat_ids = features['home_start_bat_ids'][0].tolist()
-        self.away_pit_id = features['away_start_pit_id'][0][0].item()
-        self.home_pit_id = features['home_start_pit_id'][0][0].item()
-        self.away_team_id = features['away_team_id'][0][0].item()
-        self.home_team_id = features['home_team_id'][0][0].item()
-        self.away_end_score = int(targets['value_away'][0][0].item())
-        self.home_end_score = int(targets['value_home'][0][0].item())
-        self.reset()
+    def __init__(self, policy_state, value_state):
+        self.value_state = value_state
+        self.policy_state = policy_state
+        self.away_bat_ids = self.value_state['away_start_bat_ids'][0].tolist()
+        self.home_bat_ids = self.value_state['home_start_bat_ids'][0].tolist()
+        self.away_pit_id = self.value_state['away_start_pit_id'][0].item()
+        self.home_pit_id = self.value_state['home_start_pit_id'][0].item()
+        self.away_team_id = self.value_state['away_team_id'][0].item()
+        self.home_team_id = self.value_state['home_team_id'][0].item()
+        self.pred_len = None
+        self.state = None
 
-    def get_state(self):
+    def get_policy_state(self):
         return {
-            'away_score_ct': torch.Tensor([[self.state['away_score_ct']]]),
-            'home_score_ct': torch.Tensor([[self.state['home_score_ct']]]),
-            'inn_ct': torch.Tensor([[self.state['inn_ct']]]),
-            'bat_home_id': torch.Tensor([[self.state['bat_home_id']]]),
-            'outs_ct': torch.Tensor([[self.state['outs_ct']]]),
+            'outs_ct': torch.tensor([[self.state['outs_ct']]], dtype=torch.float),
             'bat_id': torch.tensor([[self.state['bat_id']]], dtype=torch.long),
-            'start_pit_id': torch.tensor([[self.state['pit_id']]], dtype=torch.long),
+            'pit_id': torch.tensor([[self.state['pit_id']]], dtype=torch.long),
             'fld_team_id': torch.tensor([[self.state['fld_team_id']]], dtype=torch.long),
             'base1_run_id': torch.tensor([[self.state['base1_run_id']]], dtype=torch.long),
             'base2_run_id': torch.tensor([[self.state['base2_run_id']]], dtype=torch.long),
             'base3_run_id': torch.tensor([[self.state['base3_run_id']]], dtype=torch.long)
         }
 
+    def get_value_state(self):
+        return {
+            'away_score_ct': torch.tensor([[self.state['away_score_ct']]], dtype=torch.float),
+            'home_score_ct': torch.tensor([[self.state['home_score_ct']]], dtype=torch.float),
+            'inn_ct': torch.tensor([[self.state['inn_ct']]], dtype=torch.float),
+            'bat_home_id': torch.tensor([[self.state['bat_home_id']]], dtype=torch.float),
+            'away_bat_lineup': torch.tensor([[self.state['away_bat_lineup']]], dtype=torch.float),
+            'home_bat_lineup': torch.tensor([[self.state['home_bat_lineup']]], dtype=torch.float),
+            'away_start_bat_ids': torch.tensor([self.away_bat_ids], dtype=torch.long),
+            'home_start_bat_ids': torch.tensor([self.home_bat_ids], dtype=torch.long),
+            'away_start_pit_id': torch.tensor([[self.away_pit_id]], dtype=torch.long),
+            'home_start_pit_id': torch.tensor([[self.home_pit_id]], dtype=torch.long),
+            'away_team_id': torch.tensor([[self.away_team_id]], dtype=torch.long),
+            'home_team_id': torch.tensor([[self.home_team_id]], dtype=torch.long)
+        }
+
     def reset(self):
         self.pred_len = 0
-        self.away_bat_lineup = 1
-        self.home_bat_lineup = 1
         self.state = {
-            'inn_ct': 1,
-            'bat_home_id': 0,
-            'outs_ct': 0,
-            'bat_id': self.away_bat_ids[0],
-            'base1_run_id': 0,
-            'base2_run_id': 0,
-            'base3_run_id': 0,
-            'pit_id': self.home_pit_id,
-            'fld_team_id': self.home_team_id,
-            'away_score_ct': 0,
-            'home_score_ct': 0
+            'inn_ct': int(self.value_state['inn_ct'][0].item()),
+            'bat_home_id': int(self.value_state['bat_home_id'][0].item()),
+            'outs_ct': int(self.policy_state['outs_ct'][0].item()),
+            'bat_id': self.policy_state['bat_id'][0].item(),
+            'base1_run_id': self.policy_state['base1_run_id'][0].item(),
+            'base2_run_id': self.policy_state['base2_run_id'][0].item(),
+            'base3_run_id': self.policy_state['base3_run_id'][0].item(),
+            'pit_id': self.policy_state['pit_id'][0].item(),
+            'fld_team_id': self.policy_state['fld_team_id'][0].item(),
+            'away_bat_lineup': int(self.value_state['away_bat_lineup'][0].item()),
+            'home_bat_lineup': int(self.value_state['home_bat_lineup'][0].item()),
+            'away_score_ct': int(self.value_state['away_score_ct'][0].item()),
+            'home_score_ct': int(self.value_state['home_score_ct'][0].item())
         }
-        return self.get_state()
+        return self.get_policy_state(), self.get_value_state()
 
     def switch(self):
         self.state['base1_run_id'] = self.state['base2_run_id'] = self.state['base3_run_id'] = 0
@@ -73,16 +86,17 @@ class Env():
     def step(self, act_bat, act_run1, act_run2, act_run3):
         '''
         Returns:
-            state,
+            policy_state,
+            value_state,
             reward,
             done
         '''
         self.pred_len += 1
 
         if self.state['bat_home_id'] == 0:
-            self.away_bat_lineup = self.away_bat_lineup % 9 + 1
+            self.state['away_bat_lineup'] = self.state['away_bat_lineup'] % 9 + 1
         else:
-            self.home_bat_lineup = self.home_bat_lineup % 9 + 1
+            self.state['home_bat_lineup'] = self.state['home_bat_lineup'] % 9 + 1
 
         event_score_ct = (act_bat >= 4) + (act_run1 >= 4) + (act_run2 >= 4) + (act_run3 >= 4)
         if self.state['bat_home_id'] == 0:
@@ -110,15 +124,13 @@ class Env():
             done = False
 
         if done:
-            real_result = self.away_end_score < self.home_end_score
-            pred_result = self.state['away_score_ct'] < self.state['home_score_ct']
-            reward = 1 if real_result == pred_result else -1
+            result = 1 if self.state['away_score_ct'] < self.state['home_score_ct'] else 0
         else:
-            reward = 0
+            result = None
 
         if self.state['bat_home_id'] == 0:
-            self.state['bat_id'] = self.away_bat_ids[self.away_bat_lineup - 1]
+            self.state['bat_id'] = self.away_bat_ids[self.state['away_bat_lineup'] - 1]
         else:
-            self.state['bat_id'] = self.home_bat_ids[self.home_bat_lineup - 1]
+            self.state['bat_id'] = self.home_bat_ids[self.state['home_bat_lineup'] - 1]
 
-        return self.get_state(), reward, done, None
+        return self.get_policy_state(), self.get_value_state(), result, done

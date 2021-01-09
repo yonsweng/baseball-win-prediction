@@ -1,5 +1,6 @@
 import os
 import argparse
+import random
 import torch.nn.functional as F
 from torch.distributions import Categorical
 from src.models import *
@@ -7,48 +8,44 @@ from src.utils import *
 from src.env import *
 
 
-def test(vnewloader, model, device):
-    print('test start')
+def test(vnewloader, model, device, args, low, high):
+    print(f'Test started')
     model.eval()
     N_SIMUL = args.simul  # should be odd
-    episodes = 0
-    tot_steps = 0
     true, false = 0, 0
-    for features, targets in vnewloader:
+    for policy_state, value_state, _, value_target in vnewloader:
         local_true, local_false = 0, 0
-        env = Env(features, targets)
+        env = Env(policy_state, value_state)
         for _ in range(N_SIMUL):
+            length = random.randint(low, high)
             steps = 0
-            episodes += 1
-            state = env.reset()
+            policy_state, value_state = env.reset()
             while True:
-                steps += 1
-                state = {key: value.to(device) for key, value in state.items()}
-                bat_dest, run1_dest, run2_dest, run3_dest = model(**state)
-                bat_dest = Categorical(F.softmax(bat_dest, dim=1))
-                run1_dest = Categorical(F.softmax(run1_dest, dim=1))
-                run2_dest = Categorical(F.softmax(run2_dest, dim=1))
-                run3_dest = Categorical(F.softmax(run3_dest, dim=1))
-                bat_act = bat_dest.sample().item()
-                run1_act = run1_dest.sample().item()
-                run2_act = run2_dest.sample().item()
-                run3_act = run3_dest.sample().item()
-                state, reward, done, _ = env.step(bat_act, run1_act, run2_act, run3_act)
-                # print(state, reward, done, steps)
-                if done:
-                    if reward == 1:
+                if steps >= length:
+                    total_state = {**policy_state, **value_state}
+                    total_state = {key: value.to(device) for key, value in total_state.items()}
+                    _, _, _, _, value = model(**total_state)
+                    if abs(value_target['value'][0].item() - value.item()) <= 0.5:
                         local_true += 1
-                    elif reward == -1:
+                    else:
                         local_false += 1
-                    tot_steps += steps
+                    break
+                steps += 1
+                bat_act, run1_act, run2_act, run3_act = select_action(policy_state, value_state)
+                policy_state, value_state, result, done = env.step(bat_act, run1_act, run2_act, run3_act)
+                if done:
+                    if value_target['value'][0].item() == result:
+                        local_true += 1
+                    else:
+                        local_false += 1
                     break
         if local_true > local_false:
             true += 1
         else:
             false += 1
-    print(f'accuracy: {true / (true + false)}')
-    print(f'avg. steps: {tot_steps / episodes}')
-    print('test end')
+    accuracy = true / (true + false)
+    print(f'accuracy: {accuracy}')
+    return accuracy
 
 
 if __name__ == "__main__":
@@ -63,17 +60,17 @@ if __name__ == "__main__":
     parser.add_argument('--patience', type=int, default=3, metavar='N')
     parser.add_argument('--seed', type=int, default=777, metavar='N')
     parser.add_argument('--workers', type=int, default=16, metavar='N')
-    parser.add_argument('--cuda', type=int, default=1, metavar='N')
-    parser.add_argument('--simul', type=int, default=1, metavar='N')
+    parser.add_argument('--cuda', type=int, default=0, metavar='N')
+    parser.add_argument('--simul', type=int, default=15, metavar='N')  # should be odd
     args = parser.parse_args()
 
-    file_path = input('policy file: ')
+    file_path = get_latest_file_path('models')
 
     tag, device = init(args)
     data = load_data()
     num_bats, num_pits, num_teams = count_numbers(data)
     trainloader, validloader, tnewloader, vnewloader = get_dataloaders(data, args)
 
-    model = Dynamics(num_bats, num_pits, num_teams, args.emb_dim, args.dropout).to(device)
+    model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout, device).to(device)
     model.load_state_dict(torch.load(file_path))
-    test(vnewloader, model, device)
+    test(vnewloader, model, device, args, 0, 80)

@@ -2,7 +2,7 @@ import argparse
 import gym
 import numpy as np
 from itertools import count
-from collections import namedtuple
+from collections import deque
 
 import torch
 import torch.nn as nn
@@ -10,7 +10,13 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 
-# Cart Pole
+from src.dataset import *
+from src.models import *
+from src.preprocess import *
+from src.utils import *
+from src.env import *
+from test import test
+
 
 parser = argparse.ArgumentParser(description='PyTorch actor-critic example')
 parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
@@ -21,103 +27,53 @@ parser.add_argument('--render', action='store_true',
                     help='render the environment')
 parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='interval between training status logs (default: 10)')
+parser.add_argument('--test-interval', type=int, default=200, metavar='N',
+                    help='interval between tests (default: 200)')
+parser.add_argument('--dropout', type=float, default=0.5, metavar='F')
+parser.add_argument('--l2', type=float, default=0.0, metavar='F')
+parser.add_argument('--lr', type=float, default=1e-5, metavar='F')
+parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
+parser.add_argument('--batch-size', type=int, default=1, metavar='N')
+parser.add_argument('--workers', type=int, default=4, metavar='N')
+parser.add_argument('--cuda', type=int, default=1, metavar='N')
+parser.add_argument('--epochs', type=int, default=10, metavar='N')
+parser.add_argument('--simul', type=int, default=1, metavar='N')
 args = parser.parse_args()
 
-
-env = gym.make('CartPole-v0')
-env.seed(args.seed)
 torch.manual_seed(args.seed)
 
+tag, device = init(args)
+data = load_data()
+num_bats, num_pits, num_teams = count_numbers(data)
+trainloader, validloader, tnewloader, vnewloader = get_dataloaders(data, args)
 
-SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])
+print(f'# of plates: {len(trainloader.dataset)}')
+print(f'# of train games: {len(tnewloader.dataset)}')
 
+model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout, device).to(device)
+# model.load_state_dict(torch.load(get_latest_file_path('models')))
+optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
 
-class Policy(nn.Module):
-    """
-    implements both actor and critic in one model
-    """
-    def __init__(self):
-        super(Policy, self).__init__()
-        self.affine1 = nn.Linear(4, 128)
-
-        # actor's layer
-        self.action_head = nn.Linear(128, 2)
-
-        # critic's layer
-        self.value_head = nn.Linear(128, 1)
-
-        # action & reward buffer
-        self.saved_actions = []
-        self.rewards = []
-
-    def forward(self, x):
-        """
-        forward of both actor and critic
-        """
-        x = F.relu(self.affine1(x))
-
-        # actor: choses action to take from state s_t
-        # by returning probability of each action
-        action_prob = F.softmax(self.action_head(x), dim=-1)
-
-        # critic: evaluates being in the state s_t
-        state_values = self.value_head(x)
-
-        # return values for both actor and critic as a tupel of 2 values:
-        # 1. a list with the probability of each action over the action space
-        # 2. the value from state s_t
-        return action_prob, state_values
-
-
-model = Policy()
-optimizer = optim.Adam(model.parameters(), lr=3e-2)
 eps = np.finfo(np.float32).eps.item()
 
 
-def select_action(state):
-    state = torch.from_numpy(state).float()
-    probs, state_value = model(state)
-
-    # create a categorical distribution over the list of probabilities of actions
-    m = Categorical(probs)
-
-    # and sample an action using the distribution
-    action = m.sample()
-
-    # save to action buffer
-    model.saved_actions.append(SavedAction(m.log_prob(action), state_value))
-
-    # the action to take (left or right)
-    return action.item()
-
-
-def finish_episode():
+def finish_episode(y):
     """
     Training code. Calcultes actor and critic loss and performs backprop.
     """
-    R = 0
-    saved_actions = model.saved_actions
-    policy_losses = [] # list to save actor (policy) loss
-    value_losses = [] # list to save critic (value) loss
-    returns = [] # list to save the true values
+    policy_losses = []  # list to save actor (policy) loss
+    value_losses = []  # list to save critic (value) loss
 
-    # calculate the true value using rewards returned from the environment
-    for r in model.rewards[::-1]:
-        # calculate the discounted value
-        R = r + args.gamma * R
-        returns.insert(0, R)
+    curr_values = model.values[:-1]
+    next_values = model.values[1:]
 
-    returns = torch.tensor(returns)
-    returns = (returns - returns.mean()) / (returns.std() + eps)
-
-    for (log_prob, value), R in zip(saved_actions, returns):
-        advantage = R - value.item()
-
+    for log_prob, curr_value, next_value in zip(model.saved_log_probs, curr_values, next_values):
         # calculate actor (policy) loss
-        policy_losses.append(-log_prob * advantage)
+        policy_losses.append(-log_prob * next_value.detach() * (y - curr_value.detach())
+            / (eps + curr_value.detach() * (1 - curr_value.detach())))
 
-        # calculate critic (value) loss using L1 smooth loss
-        value_losses.append(F.smooth_l1_loss(value, torch.tensor([R])))
+        # calculate critic (value) loss using BCE loss
+        value_losses.append(F.binary_cross_entropy(curr_value, next_value.detach()))
 
     # reset gradients
     optimizer.zero_grad()
@@ -130,54 +86,60 @@ def finish_episode():
     optimizer.step()
 
     # reset rewards and action buffer
-    del model.rewards[:]
-    del model.saved_actions[:]
+    del model.values[:]
+    del model.saved_log_probs[:]
 
 
 def main():
-    running_reward = 10
+    iterator = iter(trainloader)
+    saved_steps = deque(maxlen=args.log_interval)
 
     # run inifinitely many episodes
     for i_episode in count(1):
+        model.train()
 
-        # reset environment and episode reward
-        state = env.reset()
-        ep_reward = 0
+        policy_state, value_state, _, value_target = next(iterator)
 
-        # for each episode, only run 9999 steps so that we don't
-        # infinite loop while learning
+        env = Env(policy_state, value_state)
+        policy_state, value_state = env.reset()
+
+        steps = 0
+        done = False
+
         for t in range(1, 10000):
+            steps += 1
 
             # select action from policy
-            action = select_action(state)
+            actions = select_action(policy_state, value_state)
 
             # take the action
-            state, reward, done, _ = env.step(action)
+            policy_state, value_state, result, done = env.step(*actions)
 
-            if args.render:
-                env.render()
-
-            model.rewards.append(reward)
-            ep_reward += reward
             if done:
+                model.values.append(torch.tensor([result], dtype=torch.float, device=device))
                 break
 
-        # update cumulative reward
-        running_reward = 0.05 * ep_reward + (1 - 0.05) * running_reward
+        if not done:
+            total_state = {**policy_state, **value_state}
+            total_state = {key: value.to(device) for key, value in total_state.items()}
+            _, _, _, _, value = model(**total_state)
+            model.values.append(value.reshape(-1))
+
+        saved_steps.append(steps)
 
         # perform backprop
-        finish_episode()
+        finish_episode(value_target['value'][0].to(device))
 
         # log results
         if i_episode % args.log_interval == 0:
-            print('Episode {}\tLast reward: {:.2f}\tAverage reward: {:.2f}'.format(
-                  i_episode, ep_reward, running_reward))
+            print('Episode {}\tlen {:.2f}'.format(i_episode, sum(saved_steps) / len(saved_steps)))
 
-        # check if we have "solved" the cart pole problem
-        if running_reward > env.spec.reward_threshold:
-            print("Solved! Running reward is now {} and "
-                  "the last episode runs to {} time steps!".format(running_reward, t))
-            break
+        # Validation
+        if i_episode % args.test_interval == 0:
+            accuracy = test(vnewloader, model, device, args, 0, 80)
+            if accuracy > best_accuracy:
+                best_accuracy = accuracy
+                torch.save(model.state_dict(), f'models/{tag}.pt')
 
 
 if __name__ == '__main__':

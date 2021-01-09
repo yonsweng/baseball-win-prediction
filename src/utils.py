@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 from sklearn.model_selection import train_test_split
 import torch
+import torch.nn.functional as F
 from .dataset import BaseballDataset
 
 
@@ -88,6 +89,32 @@ def get_latest_file_path(folder):
     return os.path.join(folder, recent_file_name)
 
 
-def get_next_bats(bat_ids, bat_lineup):
-    c = torch.cat([(bat_lineup - 1 + i) % 9 for i in range(1, 10)], 1)
-    return bat_ids.gather(1, c)
+def select_action(policy_state, value_state):
+    total_state = {**policy_state, **value_state}
+    total_state = {key: value.to(device) for key, value in total_state.items()}
+
+    bat_dest, run1_dest, run2_dest, run3_dest, value = model(**total_state)
+    bat_dest = F.softmax(bat_dest, dim=1)
+    run1_dest = F.softmax(run1_dest, dim=1)
+    run2_dest = F.softmax(run2_dest, dim=1)
+    run3_dest = F.softmax(run3_dest, dim=1)
+    value = value.reshape(-1)
+
+    bat_dest = Categorical(bat_dest.squeeze())
+    run1_dest = Categorical(run1_dest.squeeze())
+    run2_dest = Categorical(run2_dest.squeeze())
+    run3_dest = Categorical(run3_dest.squeeze())
+    bat_act = bat_dest.sample()
+    run1_act = run1_dest.sample()
+    run2_act = run2_dest.sample()
+    run3_act = run3_dest.sample()
+
+    model.saved_log_probs.append(
+        bat_dest.log_prob(bat_act) +
+        run1_dest.log_prob(run1_act) +
+        run2_dest.log_prob(run2_act) +
+        run3_dest.log_prob(run3_act)
+    )
+    model.values.append(value)
+
+    return bat_act.item(), run1_act.item(), run2_act.item(), run3_act.item()
