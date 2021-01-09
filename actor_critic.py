@@ -150,7 +150,7 @@ def main():
                 best_accuracy = accuracy
                 torch.save(model.state_dict(), f'models/{tag}.pt')
                 print('Model saved')
-                tb.add_scalar('accuracy', accuracy, i_episode)
+            tb.add_scalar('accuracy', accuracy, i_episode)
 
     tb.close()
 
