@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
+from torch.utils.tensorboard import SummaryWriter
 
 from src.dataset import *
 from src.models import *
@@ -25,10 +26,10 @@ parser.add_argument('--seed', type=int, default=543, metavar='N',
                     help='random seed (default: 543)')
 parser.add_argument('--render', action='store_true',
                     help='render the environment')
-parser.add_argument('--log-interval', type=int, default=10, metavar='N',
-                    help='interval between training status logs (default: 10)')
-parser.add_argument('--test-interval', type=int, default=300, metavar='N',
-                    help='interval between tests (default: 200)')
+parser.add_argument('--log-interval', type=int, default=20, metavar='N',
+                    help='interval between training status logs (default: 20)')
+parser.add_argument('--test-interval', type=int, default=400, metavar='N',
+                    help='interval between tests (default: 400)')
 parser.add_argument('--dropout', type=float, default=0.5, metavar='F')
 parser.add_argument('--l2', type=float, default=0.0, metavar='F')
 parser.add_argument('--lr', type=float, default=1e-6, metavar='F')
@@ -77,15 +78,11 @@ def finish_episode(y):
         # calculate critic (value) loss using BCE loss
         value_losses.append(F.binary_cross_entropy(curr_value, next_value.detach()))
 
-    # reset gradients
-    optimizer.zero_grad()
-
     # sum up all the values of policy_losses and value_losses
     loss = torch.stack(policy_losses).sum() + torch.stack(value_losses).sum()
 
     # perform backprop
     loss.backward()
-    optimizer.step()
 
     # reset rewards and action buffer
     del model.values[:]
@@ -93,6 +90,8 @@ def finish_episode(y):
 
 
 def main():
+    tb = SummaryWriter(f'./runs/{tag}')
+
     iterator = iter(trainloader)
     saved_steps = deque(maxlen=args.log_interval)
     best_accuracy = 0
@@ -112,7 +111,7 @@ def main():
         steps = 0
         done = False
 
-        for t in range(1, 10):
+        for t in range(1, 40):
             steps += 1
 
             # select action from policy
@@ -141,6 +140,8 @@ def main():
         # log results
         if i_episode % args.log_interval == 0:
             print('Episode {}\tlen {:.2f}'.format(i_episode, sum(saved_steps) / len(saved_steps)))
+            optimizer.step()
+            optimizer.zero_grad()
 
         # Validation
         if i_episode % args.test_interval == 0:
@@ -148,6 +149,10 @@ def main():
             if accuracy > best_accuracy:
                 best_accuracy = accuracy
                 torch.save(model.state_dict(), f'models/{tag}.pt')
+                print('Model saved')
+                tb.add_scalar('accuracy', accuracy, i_episode)
+
+    tb.close()
 
 
 if __name__ == '__main__':
