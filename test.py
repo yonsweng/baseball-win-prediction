@@ -8,12 +8,12 @@ from src.utils import *
 from src.env import *
 
 
-def test(vnewloader, model, device, args, low, high):
+def test(tnewloader, model, cuda, args, low=0, high=20):
     print(f'Test started')
     model.eval()
     N_SIMUL = args.simul  # should be odd
     true, false = 0, 0
-    for policy_state, value_state, _, value_target in vnewloader:
+    for policy_state, value_state, _, value_target in tnewloader:
         local_true, local_false = 0, 0
         env = Env(policy_state, value_state)
         for _ in range(N_SIMUL):
@@ -23,7 +23,7 @@ def test(vnewloader, model, device, args, low, high):
             while True:
                 if steps >= length:
                     total_state = {**policy_state, **value_state}
-                    total_state = {key: value.to(device) for key, value in total_state.items()}
+                    total_state = {key: value.to(cuda) for key, value in total_state.items()}
                     _, _, _, _, value = model(**total_state)
                     if abs(value_target['value'][0].item() - value.item()) <= 0.5:
                         local_true += 1
@@ -31,7 +31,9 @@ def test(vnewloader, model, device, args, low, high):
                         local_false += 1
                     break
                 steps += 1
-                bat_act, run1_act, run2_act, run3_act = select_action(policy_state, value_state)
+                total_state = {**policy_state, **value_state}
+                total_state = {key: value.to(cuda) for key, value in total_state.items()}
+                bat_act, run1_act, run2_act, run3_act = select_action(total_state, model)
                 policy_state, value_state, result, done = env.step(bat_act, run1_act, run2_act, run3_act)
                 if done:
                     if value_target['value'][0].item() == result:
@@ -58,13 +60,13 @@ if __name__ == "__main__":
     parser.add_argument('--batch-size', type=int, default=512, metavar='N')
     parser.add_argument('--epochs', type=int, default=50, metavar='N')
     parser.add_argument('--patience', type=int, default=3, metavar='N')
-    parser.add_argument('--seed', type=int, default=777, metavar='N')
+    parser.add_argument('--seed', type=int, default=543, metavar='N')
     parser.add_argument('--workers', type=int, default=16, metavar='N')
-    parser.add_argument('--cuda', type=int, default=0, metavar='N')
-    parser.add_argument('--simul', type=int, default=15, metavar='N')  # should be odd
+    parser.add_argument('--cuda', type=int, default=1, metavar='N')
+    parser.add_argument('--simul', type=int, default=3, metavar='N')  # should be odd
     args = parser.parse_args()
 
-    file_path = get_latest_file_path('models')
+    file_path = input('file:')
 
     tag, device = init(args)
     data = load_data()
@@ -73,4 +75,4 @@ if __name__ == "__main__":
 
     model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout, device).to(device)
     model.load_state_dict(torch.load(file_path))
-    test(vnewloader, model, device, args, 0, 80)
+    test(tnewloader, model, device, args)

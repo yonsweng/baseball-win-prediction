@@ -87,7 +87,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch-size', type=int, default=512, metavar='N')
     parser.add_argument('--epochs', type=int, default=50, metavar='N')
     parser.add_argument('--patience', type=int, default=3, metavar='N')
-    parser.add_argument('--seed', type=int, default=777, metavar='N')
+    parser.add_argument('--seed', type=int, default=543, metavar='N')
     parser.add_argument('--workers', type=int, default=8, metavar='N')
     parser.add_argument('--cuda', type=int, default=1, metavar='N')
     args = parser.parse_args()

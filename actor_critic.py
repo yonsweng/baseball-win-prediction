@@ -27,7 +27,7 @@ parser.add_argument('--render', action='store_true',
                     help='render the environment')
 parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='interval between training status logs (default: 10)')
-parser.add_argument('--test-interval', type=int, default=200, metavar='N',
+parser.add_argument('--test-interval', type=int, default=300, metavar='N',
                     help='interval between tests (default: 200)')
 parser.add_argument('--dropout', type=float, default=0.5, metavar='F')
 parser.add_argument('--l2', type=float, default=0.0, metavar='F')
@@ -35,7 +35,7 @@ parser.add_argument('--lr', type=float, default=1e-5, metavar='F')
 parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
 parser.add_argument('--batch-size', type=int, default=1, metavar='N')
 parser.add_argument('--workers', type=int, default=4, metavar='N')
-parser.add_argument('--cuda', type=int, default=1, metavar='N')
+parser.add_argument('--cuda', type=int, default=0, metavar='N')
 parser.add_argument('--epochs', type=int, default=10, metavar='N')
 parser.add_argument('--simul', type=int, default=1, metavar='N')
 args = parser.parse_args()
@@ -51,7 +51,7 @@ print(f'# of plates: {len(trainloader.dataset)}')
 print(f'# of train games: {len(tnewloader.dataset)}')
 
 model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout, device).to(device)
-# model.load_state_dict(torch.load(get_latest_file_path('models')))
+model.load_state_dict(torch.load(get_latest_file_path('models/pretrain')))
 optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
 
 eps = np.finfo(np.float32).eps.item()
@@ -93,6 +93,7 @@ def finish_episode(y):
 def main():
     iterator = iter(trainloader)
     saved_steps = deque(maxlen=args.log_interval)
+    best_accuracy = 0
 
     # run inifinitely many episodes
     for i_episode in count(1):
@@ -106,11 +107,13 @@ def main():
         steps = 0
         done = False
 
-        for t in range(1, 10000):
+        for t in range(1, 20):
             steps += 1
 
             # select action from policy
-            actions = select_action(policy_state, value_state)
+            state = {**policy_state, **value_state}
+            state = {key: value.to(device) for key, value in state.items()}
+            actions = select_action(state, model)
 
             # take the action
             policy_state, value_state, result, done = env.step(*actions)
@@ -136,7 +139,7 @@ def main():
 
         # Validation
         if i_episode % args.test_interval == 0:
-            accuracy = test(vnewloader, model, device, args, 0, 80)
+            accuracy = test(vnewloader, model, device, args)
             if accuracy > best_accuracy:
                 best_accuracy = accuracy
                 torch.save(model.state_dict(), f'models/{tag}.pt')

@@ -5,6 +5,7 @@ from datetime import datetime
 from sklearn.model_selection import train_test_split
 import torch
 import torch.nn.functional as F
+from torch.distributions import Categorical
 from .dataset import BaseballDataset
 
 
@@ -52,7 +53,7 @@ def get_dataloaders(data, args):
     # Train-valid-test split
     games = [game for _, game in data.groupby(data['GAME_ID'])]
     train_games, test_games = train_test_split(games, test_size=0.2, random_state=args.seed)
-    train_games, valid_games = train_test_split(train_games, test_size=0.2, random_state=args.seed)
+    train_games, valid_games = train_test_split(train_games, test_size=0.1, random_state=args.seed)
     train_games = pd.concat(train_games, ignore_index=True)
     valid_games = pd.concat(valid_games, ignore_index=True)
     test_games = pd.concat(test_games, ignore_index=True)
@@ -89,11 +90,8 @@ def get_latest_file_path(folder):
     return os.path.join(folder, recent_file_name)
 
 
-def select_action(policy_state, value_state):
-    total_state = {**policy_state, **value_state}
-    total_state = {key: value.to(device) for key, value in total_state.items()}
-
-    bat_dest, run1_dest, run2_dest, run3_dest, value = model(**total_state)
+def select_action(state, model):
+    bat_dest, run1_dest, run2_dest, run3_dest, value = model(**state)
     bat_dest = F.softmax(bat_dest, dim=1)
     run1_dest = F.softmax(run1_dest, dim=1)
     run2_dest = F.softmax(run2_dest, dim=1)
