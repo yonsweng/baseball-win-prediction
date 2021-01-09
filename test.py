@@ -10,6 +10,7 @@ from src.env import *
 
 def test(loader, model, cuda, args, low=0, high=20):
     print(f'Test started')
+    random.seed(args.seed)
     model.eval()
     N_SIMUL = args.simul  # should be odd
     true, false = 0, 0
