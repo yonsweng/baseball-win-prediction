@@ -95,7 +95,7 @@ if __name__ == "__main__":
     tag, device = init(args)
     data = load_data()
     num_bats, num_pits, num_teams = count_numbers(data)
-    trainloader, validloader, tnewloader, vnewloader = get_dataloaders(data, args)
+    trainloader, validloader, tnewloader, vnewloader, testloader = get_dataloaders(data, args)
 
     model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout, device).to(device)
 

@@ -57,6 +57,7 @@ def get_dataloaders(data, args):
     train_games = pd.concat(train_games, ignore_index=True)
     valid_games = pd.concat(valid_games, ignore_index=True)
     test_games = pd.concat(test_games, ignore_index=True)
+    test_games = test_games[test_games['GAME_NEW_FL'] == 'T'].reset_index(drop=True)
     tnew_games = train_games[train_games['GAME_NEW_FL'] == 'T'].reset_index(drop=True)
     vnew_games = valid_games[valid_games['GAME_NEW_FL'] == 'T'].reset_index(drop=True)
     # vnew_games = valid_games[valid_games['INN_CT'] >= 7].reset_index(drop=True)  # 7회 이후만
@@ -65,6 +66,7 @@ def get_dataloaders(data, args):
     validset = BaseballDataset(valid_games)
     tnewset = BaseballDataset(tnew_games)
     vnewset = BaseballDataset(vnew_games)
+    testset = BaseballDataset(test_games)
     trainloader = torch.utils.data.DataLoader(trainset,
         batch_size=args.batch_size, shuffle=True, num_workers=args.workers)
     validloader = torch.utils.data.DataLoader(validset,
@@ -73,8 +75,10 @@ def get_dataloaders(data, args):
         batch_size=1, shuffle=True, num_workers=args.workers)
     vnewloader = torch.utils.data.DataLoader(vnewset,
         batch_size=1, shuffle=False, num_workers=args.workers)
+    testloader = torch.utils.data.DataLoader(testset,
+        batch_size=1, shuffle=False, num_workers=args.workers)
 
-    return trainloader, validloader, tnewloader, vnewloader
+    return trainloader, validloader, tnewloader, vnewloader, testloader
 
 
 def get_latest_file_path(folder):

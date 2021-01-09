@@ -45,10 +45,12 @@ torch.manual_seed(args.seed)
 tag, device = init(args)
 data = load_data()
 num_bats, num_pits, num_teams = count_numbers(data)
-trainloader, validloader, tnewloader, vnewloader = get_dataloaders(data, args)
+trainloader, validloader, tnewloader, vnewloader, testloader = get_dataloaders(data, args)
 
 print(f'# of plates: {len(trainloader.dataset)}')
 print(f'# of train games: {len(tnewloader.dataset)}')
+print(f'# of valid games: {len(vnewloader.dataset)}')
+print(f'# of test games: {len(testloader.dataset)}')
 
 model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout, device).to(device)
 model.load_state_dict(torch.load(get_latest_file_path('models/pretrain')))
@@ -95,6 +97,9 @@ def main():
     saved_steps = deque(maxlen=args.log_interval)
     best_accuracy = 0
 
+    # Test before RL
+    accuracy = test(vnewloader, model, device, args)
+
     # run inifinitely many episodes
     for i_episode in count(1):
         model.train()
@@ -107,7 +112,7 @@ def main():
         steps = 0
         done = False
 
-        for t in range(1, 20):
+        for t in range(1, 10):
             steps += 1
 
             # select action from policy

@@ -8,12 +8,12 @@ from src.utils import *
 from src.env import *
 
 
-def test(tnewloader, model, cuda, args, low=0, high=20):
+def test(loader, model, cuda, args, low=0, high=20):
     print(f'Test started')
     model.eval()
     N_SIMUL = args.simul  # should be odd
     true, false = 0, 0
-    for policy_state, value_state, _, value_target in tnewloader:
+    for policy_state, value_state, _, value_target in loader:
         local_true, local_false = 0, 0
         env = Env(policy_state, value_state)
         for _ in range(N_SIMUL):
@@ -63,16 +63,22 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=543, metavar='N')
     parser.add_argument('--workers', type=int, default=16, metavar='N')
     parser.add_argument('--cuda', type=int, default=1, metavar='N')
-    parser.add_argument('--simul', type=int, default=3, metavar='N')  # should be odd
+    parser.add_argument('--simul', type=int, default=1, metavar='N')  # should be odd
+    parser.add_argument('--model', type=str, default='', metavar='S')
     args = parser.parse_args()
 
-    file_path = input('file:')
+    file_path = args.model
 
     tag, device = init(args)
     data = load_data()
     num_bats, num_pits, num_teams = count_numbers(data)
-    trainloader, validloader, tnewloader, vnewloader = get_dataloaders(data, args)
+    trainloader, validloader, tnewloader, vnewloader, testloader = get_dataloaders(data, args)
+
+    print(f'# of plates: {len(trainloader.dataset)}')
+    print(f'# of train games: {len(tnewloader.dataset)}')
+    print(f'# of valid games: {len(vnewloader.dataset)}')
+    print(f'# of test games: {len(testloader.dataset)}')
 
     model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout, device).to(device)
     model.load_state_dict(torch.load(file_path))
-    test(tnewloader, model, device, args)
+    test(testloader, model, device, args)
