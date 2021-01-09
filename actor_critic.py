@@ -98,6 +98,7 @@ def main():
 
     # Test before RL
     accuracy = test(vnewloader, model, device, args)
+    tb.add_scalar('accuracy', accuracy, 0)
 
     # run inifinitely many episodes
     for i_episode in count(1):
