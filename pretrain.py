@@ -70,7 +70,7 @@ def train():
 
         if epoch_loss < best_loss:
             best_loss = epoch_loss
-            torch.save(model.state_dict(), f'models/{tag}.pt')
+            torch.save(model.state_dict(), f'models/pretrain/{tag}.pt')
             early_stopping = 0
         else:
             early_stopping += 1
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()  # 자주 바뀌는 순.
     parser.add_argument('--dropout', type=float, default=0.5, metavar='F')
     parser.add_argument('--l2', type=float, default=0., metavar='F')
-    parser.add_argument('--lr', type=float, default=1e-5, metavar='F')
+    parser.add_argument('--lr', type=float, default=1e-6, metavar='F')
     parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
     parser.add_argument('--batch-size', type=int, default=512, metavar='N')
     parser.add_argument('--epochs', type=int, default=50, metavar='N')
