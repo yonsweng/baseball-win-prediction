@@ -28,8 +28,8 @@ parser.add_argument('--render', action='store_true',
                     help='render the environment')
 parser.add_argument('--log-interval', type=int, default=20, metavar='N',
                     help='interval between training status logs (default: 20)')
-parser.add_argument('--test-interval', type=int, default=400, metavar='N',
-                    help='interval between tests (default: 400)')
+parser.add_argument('--test-interval', type=int, default=500, metavar='N',
+                    help='interval between tests (default: 500)')
 parser.add_argument('--dropout', type=float, default=0.5, metavar='F')
 parser.add_argument('--l2', type=float, default=0.0, metavar='F')
 parser.add_argument('--lr', type=float, default=1e-6, metavar='F')
