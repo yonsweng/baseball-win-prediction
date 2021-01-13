@@ -26,17 +26,17 @@ parser.add_argument('--seed', type=int, default=543, metavar='N',
                     help='random seed (default: 543)')
 parser.add_argument('--render', action='store_true',
                     help='render the environment')
-parser.add_argument('--log-interval', type=int, default=20, metavar='N',
+parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='interval between training status logs (default: 20)')
-parser.add_argument('--test-interval', type=int, default=500, metavar='N',
-                    help='interval between tests (default: 500)')
+parser.add_argument('--test-interval', type=int, default=200, metavar='N',
+                    help='interval between tests (default: 200)')
 parser.add_argument('--dropout', type=float, default=0.5, metavar='F')
 parser.add_argument('--l2', type=float, default=0.0, metavar='F')
 parser.add_argument('--lr', type=float, default=1e-6, metavar='F')
 parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
 parser.add_argument('--batch-size', type=int, default=1, metavar='N')
-parser.add_argument('--workers', type=int, default=4, metavar='N')
-parser.add_argument('--cuda', type=int, default=0, metavar='N')
+parser.add_argument('--workers', type=int, default=16, metavar='N')
+parser.add_argument('--cuda', type=int, default=1, metavar='N')
 parser.add_argument('--epochs', type=int, default=10, metavar='N')
 parser.add_argument('--simul', type=int, default=1, metavar='N')
 args = parser.parse_args()
@@ -72,7 +72,7 @@ def finish_episode(y):
 
     for log_prob, curr_value, next_value in zip(model.saved_log_probs, curr_values, next_values):
         # calculate actor (policy) loss
-        policy_losses.append(-log_prob * next_value.detach() * (y - curr_value.detach())
+        policy_losses.append(-log_prob * (next_value.detach() - curr_value.detach()) * (y - curr_value.detach())
             / (eps + curr_value.detach() * (1 - curr_value.detach())))
 
         # calculate critic (value) loss using BCE loss
@@ -112,7 +112,7 @@ def main():
         steps = 0
         done = False
 
-        for t in range(1, 40):
+        for t in range(1, 100):
             steps += 1
 
             # select action from policy
@@ -136,7 +136,7 @@ def main():
         saved_steps.append(steps)
 
         # perform backprop
-        finish_episode(value_target['value'][0].to(device))
+        finish_episode(value_target['value'][0].item())
 
         # log results
         if i_episode % args.log_interval == 0:

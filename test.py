@@ -82,4 +82,4 @@ if __name__ == "__main__":
 
     model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout, device).to(device)
     model.load_state_dict(torch.load(file_path))
-    test(testloader, model, device, args)
+    test(testloader, model, device, args, 0, 0)
