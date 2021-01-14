@@ -26,13 +26,13 @@ parser.add_argument('--seed', type=int, default=543, metavar='N',
                     help='random seed (default: 543)')
 parser.add_argument('--render', action='store_true',
                     help='render the environment')
-parser.add_argument('--log-interval', type=int, default=10, metavar='N',
+parser.add_argument('--log-interval', type=int, default=50, metavar='N',
                     help='interval between training status logs (default: 20)')
-parser.add_argument('--test-interval', type=int, default=200, metavar='N',
+parser.add_argument('--test-interval', type=int, default=1000, metavar='N',
                     help='interval between tests (default: 200)')
 parser.add_argument('--dropout', type=float, default=0.5, metavar='F')
 parser.add_argument('--l2', type=float, default=0.0, metavar='F')
-parser.add_argument('--lr', type=float, default=1e-6, metavar='F')
+parser.add_argument('--lr', type=float, default=3e-6, metavar='F')
 parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
 parser.add_argument('--batch-size', type=int, default=1, metavar='N')
 parser.add_argument('--workers', type=int, default=16, metavar='N')
@@ -92,66 +92,67 @@ def finish_episode(y):
 def main():
     tb = SummaryWriter(f'./runs/{tag}')
 
-    iterator = iter(trainloader)
     saved_steps = deque(maxlen=args.log_interval)
     best_accuracy = 0
 
     # Test before RL
-    accuracy = test(vnewloader, model, device, args)
+    accuracy = test(vnewloader, model, device, args, 0, 0)
     tb.add_scalar('accuracy', accuracy, 0)
 
     # run inifinitely many episodes
-    for i_episode in count(1):
-        model.train()
+    i_episode = 0
+    for epoch in range(args.epochs):
+        print('Epoch', epoch)
+        for policy_state, value_state, _, value_target in trainloader:
+            model.train()
+            i_episode += 1
 
-        policy_state, value_state, _, value_target = next(iterator)
+            env = Env(policy_state, value_state)
+            policy_state, value_state = env.reset()
 
-        env = Env(policy_state, value_state)
-        policy_state, value_state = env.reset()
+            steps = 0
+            done = False
 
-        steps = 0
-        done = False
+            for t in range(1, 5):
+                steps += 1
 
-        for t in range(1, 100):
-            steps += 1
+                # select action from policy
+                state = {**policy_state, **value_state}
+                state = {key: value.to(device) for key, value in state.items()}
+                actions = select_action(state, model)
 
-            # select action from policy
-            state = {**policy_state, **value_state}
-            state = {key: value.to(device) for key, value in state.items()}
-            actions = select_action(state, model)
+                # take the action
+                policy_state, value_state, result, done = env.step(*actions)
 
-            # take the action
-            policy_state, value_state, result, done = env.step(*actions)
+                if done:
+                    model.values.append(torch.tensor([result], dtype=torch.float, device=device))
+                    break
 
-            if done:
-                model.values.append(torch.tensor([result], dtype=torch.float, device=device))
-                break
+            if not done:
+                total_state = {**policy_state, **value_state}
+                total_state = {key: value.to(device) for key, value in total_state.items()}
+                _, _, _, _, value = model(**total_state)
+                model.values.append(value.reshape(-1))
 
-        if not done:
-            total_state = {**policy_state, **value_state}
-            total_state = {key: value.to(device) for key, value in total_state.items()}
-            _, _, _, _, value = model(**total_state)
-            model.values.append(value.reshape(-1))
+            saved_steps.append(steps)
 
-        saved_steps.append(steps)
+            # perform backprop
+            finish_episode(value_target['value'][0].item())
 
-        # perform backprop
-        finish_episode(value_target['value'][0].item())
+            # log results
+            if i_episode % args.log_interval == 0:
+                print('Episode {}\tlen {:.2f}'.format(i_episode, sum(saved_steps) / len(saved_steps)))
+                optimizer.step()
+                optimizer.zero_grad()
 
-        # log results
-        if i_episode % args.log_interval == 0:
-            print('Episode {}\tlen {:.2f}'.format(i_episode, sum(saved_steps) / len(saved_steps)))
-            optimizer.step()
-            optimizer.zero_grad()
-
-        # Validation
-        if i_episode % args.test_interval == 0:
-            accuracy = test(vnewloader, model, device, args)
-            if accuracy > best_accuracy:
-                best_accuracy = accuracy
-                torch.save(model.state_dict(), f'models/{tag}.pt')
-                print('Model saved')
-            tb.add_scalar('accuracy', accuracy, i_episode)
+            # Validation
+            if i_episode % args.test_interval == 0:
+                accuracy = test(vnewloader, model, device, args, 0, 0)
+                if accuracy > best_accuracy:
+                    best_accuracy = accuracy
+                    torch.save(model.state_dict(), f'models/{tag}.pt')
+                    print('Model saved')
+                tb.add_scalar('accuracy', accuracy, i_episode)
 
     tb.close()
 

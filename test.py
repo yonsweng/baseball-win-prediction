@@ -66,6 +66,8 @@ if __name__ == "__main__":
     parser.add_argument('--cuda', type=int, default=1, metavar='N')
     parser.add_argument('--simul', type=int, default=1, metavar='N')  # should be odd
     parser.add_argument('--model', type=str, default='', metavar='S')
+    parser.add_argument('--min', type=int, default=0, metavar='N')
+    parser.add_argument('--max', type=int, default=20, metavar='N')
     args = parser.parse_args()
 
     file_path = args.model
@@ -82,4 +84,4 @@ if __name__ == "__main__":
 
     model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout, device).to(device)
     model.load_state_dict(torch.load(file_path))
-    test(testloader, model, device, args, 0, 0)
+    test(testloader, model, device, args, args.min, args.max)
