@@ -43,7 +43,7 @@ class BaseballDataset(Dataset):
             'run3_dest': torch.tensor([data['RUN3_DEST_ID']], dtype=torch.long)
         }
         value_target = {
-            'value': torch.tensor([data['VALUE_AWAY'] < data['VALUE_HOME']], dtype=torch.float)
+            'value': torch.tensor([data['VALUE_AWAY'] + data['AWAY_SCORE_CT'] < data['VALUE_HOME'] + data['HOME_SCORE_CT']], dtype=torch.float)
         }
 
         return policy_state, value_state, policy_targets, value_target

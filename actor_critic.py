@@ -32,7 +32,7 @@ parser.add_argument('--test-interval', type=int, default=1000, metavar='N',
                     help='interval between tests (default: 200)')
 parser.add_argument('--dropout', type=float, default=0.5, metavar='F')
 parser.add_argument('--l2', type=float, default=0.0, metavar='F')
-parser.add_argument('--lr', type=float, default=3e-6, metavar='F')
+parser.add_argument('--lr', type=float, default=2e-6, metavar='F')
 parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
 parser.add_argument('--batch-size', type=int, default=1, metavar='N')
 parser.add_argument('--workers', type=int, default=16, metavar='N')
@@ -72,8 +72,7 @@ def finish_episode(y):
 
     for log_prob, curr_value, next_value in zip(model.saved_log_probs, curr_values, next_values):
         # calculate actor (policy) loss
-        policy_losses.append(-log_prob * (next_value.detach() - curr_value.detach()) * (y - curr_value.detach())
-            / (eps + curr_value.detach() * (1 - curr_value.detach())))
+        policy_losses.append(-log_prob * F.binary_cross_entropy(next_value.detach(), y.detach()))
 
         # calculate critic (value) loss using BCE loss
         value_losses.append(F.binary_cross_entropy(curr_value, next_value.detach()))
@@ -113,7 +112,7 @@ def main():
             steps = 0
             done = False
 
-            for t in range(1, 5):
+            for t in range(1, 10):
                 steps += 1
 
                 # select action from policy
@@ -137,7 +136,7 @@ def main():
             saved_steps.append(steps)
 
             # perform backprop
-            finish_episode(value_target['value'][0].item())
+            finish_episode(value_target['value'][0].to(device))
 
             # log results
             if i_episode % args.log_interval == 0:

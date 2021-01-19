@@ -88,8 +88,8 @@ def preprocess(data):
             game[f'HOME_START_BAT{idx + 1}_ID'] = home_bats[idx]
 
         # AWAY_START_PIT_ID, HOME_START_PIT_ID
-        away_pit = game['PIT_ID'][game['BAT_HOME_ID'] == 0].values[0]
-        home_pit = game['PIT_ID'][game['BAT_HOME_ID'] == 1].values[0]
+        away_pit = game['PIT_ID'][game['BAT_HOME_ID'] == 1].values[0]
+        home_pit = game['PIT_ID'][game['BAT_HOME_ID'] == 0].values[0]
         game['AWAY_START_PIT_ID'] = away_pit
         game['HOME_START_PIT_ID'] = home_pit
 

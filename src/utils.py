@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 from torch.distributions import Categorical
 from .dataset import BaseballDataset
+from src.preprocess import *
 
 
 def init(args):

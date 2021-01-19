@@ -50,6 +50,7 @@ def train():
         # Validation
         model.eval()
         epoch_loss = 0
+        values = []
 
         for policy_state, value_state, policy_targets, value_target in validloader:
             total_state = {**policy_state, **value_state}
@@ -65,8 +66,11 @@ def train():
 
             epoch_loss += loss.item() * value.shape[0]
 
+            values += value.tolist()
+
         epoch_loss /= len(validloader.dataset)
         tb.add_scalar('valid loss', epoch_loss, epoch)
+        tb.add_histogram('value', np.array(values), epoch)
 
         if epoch_loss < best_loss:
             best_loss = epoch_loss
