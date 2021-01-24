@@ -19,8 +19,8 @@ class Model(nn.Module):
             nn.Dropout(dropout)
         )
 
-        # Value input
-        self.value_in = nn.Sequential(
+        # Pred input
+        self.pred_in = nn.Sequential(
             nn.Linear(7 + 28 * emb_dim, 8192),
             nn.ReLU(),
             nn.Dropout(dropout)
@@ -45,15 +45,16 @@ class Model(nn.Module):
         self.run2_dest = nn.Linear(512, 5)
         self.run3_dest = nn.Linear(512, 5)
 
-        # Value output
-        self.value_out = nn.Sequential(
+        # Pred output
+        self.pred_out = nn.Sequential(
             nn.Linear(512, 1),
             nn.Sigmoid()
         )
 
         # Memories
         self.saved_log_probs = []
-        self.values = []
+        self.saved_rewards = []
+        self.saved_preds = []
 
         # Masks
         self.bat_mask = torch.tensor([0., 0., 0., 0., 0.], device=device)
@@ -78,8 +79,8 @@ class Model(nn.Module):
         home_bat_lineup,
         away_start_bat_ids,
         home_start_bat_ids,
-        away_start_pit_id,
-        home_start_pit_id,
+        away_pit_id,
+        home_pit_id,
         away_team_id,
         home_team_id
     ):
@@ -89,9 +90,9 @@ class Model(nn.Module):
             run1_dest (BATCH_SIZE, 5),
             run2_dest (BATCH_SIZE, 5),
             run3_dest (BATCH_SIZE, 5),
-            value     (BATCH_SIZE, 1)
+            pred      (BATCH_SIZE, 1)
         '''
-        # For policy and value
+        # For policy and pred
         bat = self.bat_emb(bat_id).reshape(bat_id.shape[0], -1)
         pit = self.pit_emb(pit_id).reshape(pit_id.shape[0], -1)
         fld_team = self.team_emb(fld_team_id).reshape(fld_team_id.shape[0], -1)
@@ -99,11 +100,11 @@ class Model(nn.Module):
         base2_run = self.bat_emb(base2_run_id).reshape(base2_run_id.shape[0], -1)
         base3_run = self.bat_emb(base3_run_id).reshape(base3_run_id.shape[0], -1)
 
-        # For value
+        # For pred
         away_start_bats = self.bat_emb(away_start_bat_ids).reshape(away_start_bat_ids.shape[0], -1)
         home_start_bats = self.bat_emb(home_start_bat_ids).reshape(home_start_bat_ids.shape[0], -1)
-        away_start_pit = self.pit_emb(away_start_pit_id).reshape(away_start_pit_id.shape[0], -1)
-        home_start_pit = self.pit_emb(home_start_pit_id).reshape(home_start_pit_id.shape[0], -1)
+        away_start_pit = self.pit_emb(away_pit_id).reshape(away_pit_id.shape[0], -1)
+        home_start_pit = self.pit_emb(home_pit_id).reshape(home_pit_id.shape[0], -1)
         away_team = self.team_emb(away_team_id).reshape(away_team_id.shape[0], -1)
         home_team = self.team_emb(home_team_id).reshape(home_team_id.shape[0], -1)
 
@@ -128,8 +129,8 @@ class Model(nn.Module):
         run2_dest = self.run2_mask + run2_dest
         run3_dest = self.run3_mask + run3_dest
 
-        # Value
-        x_value = torch.cat([
+        # Pred
+        x_pred = torch.cat([
             outs_ct,
             bat,
             pit,
@@ -150,8 +151,8 @@ class Model(nn.Module):
             away_team,
             home_team
         ], dim=1)
-        x_value = self.value_in(x_value)
-        x_value = self.dense(x_value)
-        value = self.value_out(x_value)
+        x_pred = self.pred_in(x_pred)
+        x_pred = self.dense(x_pred)
+        pred = self.pred_out(x_pred)
 
-        return bat_dest, run1_dest, run2_dest, run3_dest, value
+        return bat_dest, run1_dest, run2_dest, run3_dest, pred

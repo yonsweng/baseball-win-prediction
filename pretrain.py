@@ -26,23 +26,21 @@ def train():
         model.train()
         epoch_loss = 0
 
-        for policy_state, value_state, policy_targets, value_target in trainloader:
-            total_state = {**policy_state, **value_state}
-            total_state = {key: value.to(device) for key, value in total_state.items()}
+        for state, targets in trainloader:
+            state = {key: value.to(device) for key, value in state.items()}
+            bat_dest, run1_dest, run2_dest, run3_dest, pred = model(**state)
 
-            bat_dest, run1_dest, run2_dest, run3_dest, value = model(**total_state)
-
-            loss = CELoss(bat_dest, clip(policy_targets['bat_dest']).squeeze().to(device)) \
-                 + CELoss(run1_dest, clip(policy_targets['run1_dest']).squeeze().to(device)) \
-                 + CELoss(run2_dest, clip(policy_targets['run2_dest']).squeeze().to(device)) \
-                 + CELoss(run3_dest, clip(policy_targets['run3_dest']).squeeze().to(device)) \
-                 + BCELoss(value, value_target['value'].to(device))
+            loss = CELoss(bat_dest, clip(targets['bat_dest']).squeeze().to(device)) \
+                 + CELoss(run1_dest, clip(targets['run1_dest']).squeeze().to(device)) \
+                 + CELoss(run2_dest, clip(targets['run2_dest']).squeeze().to(device)) \
+                 + CELoss(run3_dest, clip(targets['run3_dest']).squeeze().to(device)) \
+                 + args.result_ratio * BCELoss(pred, targets['result'].to(device))
 
             model.zero_grad()
             loss.backward()
             optimizer.step()
 
-            epoch_loss += loss.item() * value.shape[0]
+            epoch_loss += loss.item() * pred.shape[0]
 
         epoch_loss /= len(trainloader.dataset)
         tb.add_scalar('train loss', epoch_loss, epoch)
@@ -50,27 +48,25 @@ def train():
         # Validation
         model.eval()
         epoch_loss = 0
-        values = []
+        preds = []
 
-        for policy_state, value_state, policy_targets, value_target in validloader:
-            total_state = {**policy_state, **value_state}
-            total_state = {key: value.to(device) for key, value in total_state.items()}
+        for state, targets in validloader:
+            state = {key: value.to(device) for key, value in state.items()}
+            bat_dest, run1_dest, run2_dest, run3_dest, pred = model(**state)
 
-            bat_dest, run1_dest, run2_dest, run3_dest, value = model(**total_state)
+            loss = CELoss(bat_dest, clip(targets['bat_dest']).squeeze().to(device)) \
+                 + CELoss(run1_dest, clip(targets['run1_dest']).squeeze().to(device)) \
+                 + CELoss(run2_dest, clip(targets['run2_dest']).squeeze().to(device)) \
+                 + CELoss(run3_dest, clip(targets['run3_dest']).squeeze().to(device)) \
+                 + args.result_ratio * BCELoss(pred, targets['result'].to(device))
 
-            loss = CELoss(bat_dest, clip(policy_targets['bat_dest']).squeeze().to(device)) \
-                 + CELoss(run1_dest, clip(policy_targets['run1_dest']).squeeze().to(device)) \
-                 + CELoss(run2_dest, clip(policy_targets['run2_dest']).squeeze().to(device)) \
-                 + CELoss(run3_dest, clip(policy_targets['run3_dest']).squeeze().to(device)) \
-                 + BCELoss(value, value_target['value'].to(device))
+            epoch_loss += loss.item() * pred.shape[0]
 
-            epoch_loss += loss.item() * value.shape[0]
-
-            values += value.tolist()
+            preds += pred.tolist()
 
         epoch_loss /= len(validloader.dataset)
         tb.add_scalar('valid loss', epoch_loss, epoch)
-        tb.add_histogram('value', np.array(values), epoch)
+        # tb.add_histogram('pred', np.array(preds), epoch)
 
         if epoch_loss < best_loss:
             best_loss = epoch_loss
@@ -81,18 +77,21 @@ def train():
             if early_stopping > args.patience:
                 break
 
+        tb.flush()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()  # 자주 바뀌는 순.
     parser.add_argument('--dropout', type=float, default=0.5, metavar='F')
-    parser.add_argument('--l2', type=float, default=0., metavar='F')
-    parser.add_argument('--lr', type=float, default=1e-6, metavar='F')
+    parser.add_argument('--l2', type=float, default=1e-2, metavar='F')
+    parser.add_argument('--lr', type=float, default=2e-6, metavar='F')
+    parser.add_argument('--result-ratio', type=float, default=1, metavar='F')
     parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
     parser.add_argument('--batch-size', type=int, default=512, metavar='N')
     parser.add_argument('--epochs', type=int, default=50, metavar='N')
     parser.add_argument('--patience', type=int, default=3, metavar='N')
     parser.add_argument('--seed', type=int, default=543, metavar='N')
-    parser.add_argument('--workers', type=int, default=8, metavar='N')
+    parser.add_argument('--workers', type=int, default=4, metavar='N')
     parser.add_argument('--cuda', type=int, default=1, metavar='N')
     args = parser.parse_args()
 
@@ -103,6 +102,7 @@ if __name__ == "__main__":
 
     model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout, device).to(device)
 
+    print(tag)
     tb = SummaryWriter(f'./runs/{tag}')
     train()
     tb.close()

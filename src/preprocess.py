@@ -4,8 +4,8 @@ from sklearn.preprocessing import OrdinalEncoder
 
 used_cols = [
     'GAME_ID',
-    'AWAY_START_PIT_ID',
-    'HOME_START_PIT_ID',
+    'AWAY_PIT_ID',
+    'HOME_PIT_ID',
     'AWAY_TEAM_ID',
     'HOME_TEAM_ID',
     'AWAY_BAT_LINEUP_ID',
@@ -26,8 +26,8 @@ used_cols = [
     'RUN1_DEST_ID',
     'RUN2_DEST_ID',
     'RUN3_DEST_ID',
-    'VALUE_AWAY',
-    'VALUE_HOME',
+    'AWAY_END_SCORE',
+    'HOME_END_SCORE',
     'GAME_NEW_FL'
 ] + [f'AWAY_START_BAT{i}_ID' for i in range(1, 10)] \
   + [f'HOME_START_BAT{i}_ID' for i in range(1, 10)]
@@ -87,35 +87,40 @@ def preprocess(data):
         for idx in range(9):
             game[f'HOME_START_BAT{idx + 1}_ID'] = home_bats[idx]
 
-        # AWAY_START_PIT_ID, HOME_START_PIT_ID
-        away_pit = game['PIT_ID'][game['BAT_HOME_ID'] == 1].values[0]
-        home_pit = game['PIT_ID'][game['BAT_HOME_ID'] == 0].values[0]
-        game['AWAY_START_PIT_ID'] = away_pit
-        game['HOME_START_PIT_ID'] = home_pit
-
-        # AWAY_BAT_LINEUP_ID, HOME_BAT_LINEUP_ID
+        # AWAY_BAT_LINEUP_ID, HOME_BAT_LINEUP_ID, AWAY_PIT_ID, HOME_PIT_ID
         bat_home_id = list(game['BAT_HOME_ID'].values)
         bat_lineup_id = list(game['BAT_LINEUP_ID'].values)
+        pit_id = list(game['PIT_ID'].values)
+        away_pit = game['PIT_ID'][game['BAT_HOME_ID'] == 1].values[0]
+        home_pit = game['PIT_ID'][game['BAT_HOME_ID'] == 0].values[0]
         away_bat_lineup = []
         home_bat_lineup = []
+        away_pits = []
+        home_pits = []
         for i, bat_home in enumerate(bat_home_id):
             if bat_home == 0:  # Away bat
                 away_bat_lineup.append(bat_lineup_id[i])
                 home_bat_lineup.append(home_bat_lineup[i-1] if i > 0 else 1)
+                home_pit = pit_id[i]
             else:              # Home bat
                 home_bat_lineup.append(bat_lineup_id[i])
                 away_bat_lineup.append(away_bat_lineup[i-1] if i > 0 else 1)
+                away_pit = pit_id[i]
+            away_pits.append(away_pit)
+            home_pits.append(home_pit)
         game['AWAY_BAT_LINEUP_ID'] = away_bat_lineup
         game['HOME_BAT_LINEUP_ID'] = home_bat_lineup
+        game['AWAY_PIT_ID'] = away_pits
+        game['HOME_PIT_ID'] = home_pits
 
         # Get scores to get until end.
         last_pa = game.iloc[-1]
-        last_away_score_ct = last_pa['AWAY_SCORE_CT'] + \
+        away_end_score = last_pa['AWAY_SCORE_CT'] + \
             (last_pa['EVENT_RUNS_CT'] if last_pa['BAT_HOME_ID'] == 0 else 0)
-        last_home_score_ct = last_pa['HOME_SCORE_CT'] + \
+        home_end_score = last_pa['HOME_SCORE_CT'] + \
             (last_pa['EVENT_RUNS_CT'] if last_pa['BAT_HOME_ID'] == 1 else 0)
-        game['VALUE_AWAY'] = last_away_score_ct - game['AWAY_SCORE_CT'] 
-        game['VALUE_HOME'] = last_home_score_ct - game['HOME_SCORE_CT']
+        game['AWAY_END_SCORE'] = away_end_score
+        game['HOME_END_SCORE'] = home_end_score
 
     data = pd.concat(games, ignore_index=False)
     data = data[used_cols]

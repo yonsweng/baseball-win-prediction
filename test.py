@@ -8,40 +8,47 @@ from src.utils import *
 from src.env import *
 
 
-def test(loader, model, cuda, args, low=0, high=20):
+def test(env, loader, model, cuda, args, low=0, high=0, verbose=0):
     print(f'Test started')
-    random.seed(args.seed)
     model.eval()
     N_SIMUL = args.simul  # should be odd
+    i_game = 0
     true, false = 0, 0
-    for policy_state, value_state, _, value_target in loader:
+    for ori_state, targets in loader:
+        # if targets['result'][0].item() > 0.5:
+        #     true += 1
+        # else:
+        #     false += 1
         local_true, local_false = 0, 0
-        env = Env(policy_state, value_state)
+        i_game += 1
+        if verbose and i_game % 20 == 0:
+            print(i_game)
         for _ in range(N_SIMUL):
             length = random.randint(low, high)
             steps = 0
-            policy_state, value_state = env.reset()
+            state = env.reset(ori_state, targets)
             while True:
+                state = {key: value.to(cuda) for key, value in state.items()}
                 if steps >= length:
-                    total_state = {**policy_state, **value_state}
-                    total_state = {key: value.to(cuda) for key, value in total_state.items()}
-                    _, _, _, _, value = model(**total_state)
-                    if abs(value_target['value'][0].item() - value.item()) <= 0.5:
+                    _, _, _, _, pred = model(**state)
+                    if abs(targets['result'][0].item() - pred.item()) <= 0.5:
                         local_true += 1
                     else:
                         local_false += 1
                     break
                 steps += 1
-                total_state = {**policy_state, **value_state}
-                total_state = {key: value.to(cuda) for key, value in total_state.items()}
-                bat_act, run1_act, run2_act, run3_act = select_action(total_state, model)
-                policy_state, value_state, result, done = env.step(bat_act, run1_act, run2_act, run3_act)
+                bat_act, run1_act, run2_act, run3_act = select_action(state, model)
+                state, reward, done = env.step(bat_act, run1_act, run2_act, run3_act)
                 if done:
-                    if value_target['value'][0].item() == result:
+                    if reward == 1:
                         local_true += 1
                     else:
                         local_false += 1
                     break
+            # reset rewards and action buffer
+            del model.saved_log_probs[:]
+            del model.saved_rewards[:]
+            del model.saved_preds[:]
         if local_true > local_false:
             true += 1
         else:
@@ -67,8 +74,11 @@ if __name__ == "__main__":
     parser.add_argument('--simul', type=int, default=1, metavar='N')  # should be odd
     parser.add_argument('--model', type=str, default='', metavar='S')
     parser.add_argument('--min', type=int, default=0, metavar='N')
-    parser.add_argument('--max', type=int, default=20, metavar='N')
+    parser.add_argument('--max', type=int, default=0, metavar='N')
     args = parser.parse_args()
+
+    torch.manual_seed(args.seed)
+    random.seed(args.seed)
 
     file_path = args.model
 
@@ -82,6 +92,8 @@ if __name__ == "__main__":
     print(f'# of valid games: {len(vnewloader.dataset)}')
     print(f'# of test games: {len(testloader.dataset)}')
 
+    env = Env()
+
     model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout, device).to(device)
     model.load_state_dict(torch.load(file_path))
-    test(testloader, model, device, args, args.min, args.max)
+    test(env, testloader, model, device, args, args.min, args.max, 1)
