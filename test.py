@@ -3,6 +3,7 @@ import argparse
 import random
 import torch.nn.functional as F
 from torch.distributions import Categorical
+from sklearn.metrics import accuracy_score, precision_score, recall_score, confusion_matrix
 from src.models import *
 from src.utils import *
 from src.env import *
@@ -11,51 +12,61 @@ from src.env import *
 def test(env, loader, model, cuda, args, low=0, high=0, verbose=0):
     print(f'Test started')
     model.eval()
-    N_SIMUL = args.simul  # should be odd
-    i_game = 0
-    true, false = 0, 0
+
+    # get y_true
+    y_true = []
     for ori_state, targets in loader:
-        # if targets['result'][0].item() > 0.5:
-        #     true += 1
-        # else:
-        #     false += 1
-        local_true, local_false = 0, 0
-        i_game += 1
-        if verbose and i_game % 20 == 0:
-            print(i_game)
-        for _ in range(N_SIMUL):
-            length = random.randint(low, high)
+        y_true += targets['result'][0].tolist()
+    y_true = np.array(y_true)
+
+    y_pred = np.zeros(len(loader.dataset))
+
+    for i_simul in range(args.simul):
+        local_y_pred = []
+
+        for ori_state, targets in loader:
             steps = 0
+
+            length = random.randint(low, high)
             state = env.reset(ori_state, targets)
+
             while True:
-                state = {key: value.to(cuda) for key, value in state.items()}
-                if steps >= length:
-                    _, _, _, _, pred = model(**state)
-                    if abs(targets['result'][0].item() - pred.item()) <= 0.5:
-                        local_true += 1
-                    else:
-                        local_false += 1
-                    break
                 steps += 1
-                bat_act, run1_act, run2_act, run3_act = select_action(state, model)
-                state, reward, done = env.step(bat_act, run1_act, run2_act, run3_act)
-                if done:
-                    if reward == 1:
-                        local_true += 1
-                    else:
-                        local_false += 1
+
+                state = {key: value.to(cuda) for key, value in state.items()}
+                bat_dest, run1_dest, run2_dest, run3_dest, pred = model(**state)
+                pred = pred.squeeze()
+
+                if steps >= length:
+                    local_y_pred.append(pred.item())
                     break
-            # reset rewards and action buffer
-            del model.saved_log_probs[:]
-            del model.saved_rewards[:]
-            del model.saved_preds[:]
-        if local_true > local_false:
-            true += 1
-        else:
-            false += 1
-    accuracy = true / (true + false)
-    print(f'accuracy: {accuracy}')
-    return accuracy
+
+                bat_act = Categorical(F.softmax(bat_dest.squeeze())).sample()
+                run1_act = Categorical(F.softmax(run1_dest.squeeze())).sample()
+                run2_act = Categorical(F.softmax(run2_dest.squeeze())).sample()
+                run3_act = Categorical(F.softmax(run3_dest.squeeze())).sample()
+
+                state, reward, done = env.step(bat_act, run1_act, run2_act, run3_act)
+
+                if done:
+                    local_y_pred.append(float((state['away_score_ct'] < state['home_score_ct']).item()))
+                    break
+
+        y_pred += np.array(local_y_pred)
+
+    y_pred /= args.simul
+
+    print(y_pred)
+    print(y_true)
+
+    threshold = 0.5
+    precision = precision_score(y_true, y_pred > threshold)
+    recall = recall_score(y_true, y_pred > threshold)
+    accuracy = accuracy_score(y_true, y_pred > threshold)
+    print(f'precision: {precision:.3f} \trecall: {recall:.3f} \taccuracy: {accuracy:.3f}')
+    print(confusion_matrix(y_true, y_pred > threshold))
+
+    return precision, recall, accuracy
 
 
 if __name__ == "__main__":
@@ -96,4 +107,4 @@ if __name__ == "__main__":
 
     model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout, device).to(device)
     model.load_state_dict(torch.load(file_path))
-    test(env, testloader, model, device, args, args.min, args.max, 1)
+    precision, recall, accuracy = test(env, testloader, model, device, args, args.min, args.max, 1)
