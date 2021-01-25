@@ -27,12 +27,12 @@ parser.add_argument('--seed', type=int, default=543, metavar='N',
                     help='random seed (default: 543)')
 parser.add_argument('--render', action='store_true',
                     help='render the environment')
-parser.add_argument('--prop-interval', type=int, default=10, metavar='N',
-                    help='interval between backpropagation (default: 10)')
-parser.add_argument('--log-interval', type=int, default=20, metavar='N',
-                    help='interval between training status logs (default: 20)')
-parser.add_argument('--test-interval', type=int, default=200, metavar='N',
-                    help='interval between tests (default: 200)')
+parser.add_argument('--prop-interval', type=int, default=20, metavar='N',
+                    help='interval between backpropagation (default: 20)')
+parser.add_argument('--log-interval', type=int, default=200, metavar='N',
+                    help='interval between training status logs (default: 200)')
+parser.add_argument('--test-interval', type=int, default=1000, metavar='N',
+                    help='interval between tests (default: 1000)')
 parser.add_argument('--dropout', type=float, default=0.5, metavar='F')
 parser.add_argument('--l2', type=float, default=1e-4, metavar='F')
 parser.add_argument('--lr', type=float, default=3e-6, metavar='F')
@@ -76,20 +76,27 @@ def finish_episode(y, tb, i_episode):
     curr_preds = model.saved_preds[:-1]
     next_preds = model.saved_preds[1:]
 
+    conf = 1.
+
     for log_prob, curr_pred, next_pred, reward in zip(model.saved_log_probs, curr_preds, next_preds, model.saved_rewards):
         curr_value = (-1) ** y * (1 - 2 * curr_pred)
         next_value = (-1) ** y * (1 - 2 * next_pred)
 
-        advantage = reward + args.gamma * next_value.detach() - curr_value
+        conf *= 0.95
+
+        advantage = conf * (reward + args.gamma * next_value.detach() - curr_value)
 
         # calculate actor (policy) loss
         policy_loss = -log_prob * advantage.detach()
-        policy_loss = torch.clamp(policy_loss, min=-2., max=2.)
+        # policy_loss = torch.clamp(policy_loss, min=-2., max=2.)
         policy_losses.append(policy_loss)
 
         # calculate critic (value) loss
         # value_losses.append(advantage ** 2)
-        value_losses.append(F.smooth_l1_loss(curr_value, reward + args.gamma * next_value.detach()))
+        # pred_loss = F.binary_cross_entropy(curr_pred, torch.Tensor([y]).to(device))
+        # value_losses.append(pred_loss)
+        value_loss = conf * F.smooth_l1_loss(curr_value, reward + args.gamma - next_value.detach())
+        value_losses.append(value_loss)
 
     # sum up all the values of policy_losses and value_losses
     policy_losses = torch.stack(policy_losses)
@@ -124,7 +131,7 @@ def main():
     env = Env()
 
     # Test before RL
-    accuracy = test(env, vnewloader, model, device, args, 0, 0)
+    precision, recall, accuracy = test(env, vnewloader, model, device, args, 0, 0)
     tb.add_scalar('accuracy', accuracy, 0)
 
     # run inifinitely many episodes
@@ -178,13 +185,20 @@ def main():
                 print('Episode {}\tlen {:.2f}'.format(i_episode, sum(saved_steps) / len(saved_steps)))
                 tb.add_histogram('pred', np.array(preds_list), i_episode)
 
+                # draw histogram of weights on the tensorboard
+                tb.add_histogram('bat_emb', model.bat_emb.weight, i_episode)
+                tb.add_histogram('pit_emb', model.pit_emb.weight, i_episode)
+                tb.add_histogram('team_emb', model.team_emb.weight, i_episode)
+
             # Validation
             if i_episode % args.test_interval == 0:
-                accuracy = test(env, vnewloader, model, device, args, 0, 0)
+                precision, recall, accuracy = test(env, vnewloader, model, device, args, 0, 0)
                 if accuracy > best_accuracy:
                     best_accuracy = accuracy
                     torch.save(model.state_dict(), f'models/{tag}.pt')
                     print('Model saved')
+                tb.add_scalar('precision', precision, i_episode)
+                tb.add_scalar('recall', recall, i_episode)
                 tb.add_scalar('accuracy', accuracy, i_episode)
                 tb.flush()
 
