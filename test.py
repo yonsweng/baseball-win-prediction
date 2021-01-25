@@ -56,8 +56,8 @@ def test(env, loader, model, cuda, args, low=0, high=0, verbose=0):
 
     y_pred /= args.simul
 
-    print(y_pred)
-    print(y_true)
+    # print(y_pred)
+    # print(y_true)
 
     threshold = 0.5
     precision = precision_score(y_true, y_pred > threshold)
