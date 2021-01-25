@@ -68,6 +68,11 @@ def train():
         tb.add_scalar('valid loss', epoch_loss, epoch)
         # tb.add_histogram('pred', np.array(preds), epoch)
 
+        # draw histogram of weights on the tensorboard
+        tb.add_histogram('bat_emb', model.bat_emb.weight, epoch)
+        tb.add_histogram('pit_emb', model.pit_emb.weight, epoch)
+        tb.add_histogram('team_emb', model.team_emb.weight, epoch)
+
         if epoch_loss < best_loss:
             best_loss = epoch_loss
             torch.save(model.state_dict(), f'models/pretrain/{tag}.pt')
