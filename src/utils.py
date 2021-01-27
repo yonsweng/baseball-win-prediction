@@ -95,29 +95,15 @@ def get_latest_file_path(folder):
     return os.path.join(folder, recent_file_name)
 
 
-def select_action(state, model):
-    bat_dest, run1_dest, run2_dest, run3_dest, pred = model(**state)
-    bat_dest = F.softmax(bat_dest, dim=1)
-    run1_dest = F.softmax(run1_dest, dim=1)
-    run2_dest = F.softmax(run2_dest, dim=1)
-    run3_dest = F.softmax(run3_dest, dim=1)
-    pred = pred.reshape(-1)
-
+def select_action(bat_dest, run1_dest, run2_dest, run3_dest):
     bat_dest = Categorical(bat_dest.squeeze())
     run1_dest = Categorical(run1_dest.squeeze())
     run2_dest = Categorical(run2_dest.squeeze())
     run3_dest = Categorical(run3_dest.squeeze())
+
     bat_act = bat_dest.sample()
     run1_act = run1_dest.sample()
     run2_act = run2_dest.sample()
     run3_act = run3_dest.sample()
-
-    model.saved_log_probs.append(
-        bat_dest.log_prob(bat_act) +
-        run1_dest.log_prob(run1_act) +
-        run2_dest.log_prob(run2_act) +
-        run3_dest.log_prob(run3_act)
-    )
-    model.saved_preds.append(pred)
 
     return bat_act.item(), run1_act.item(), run2_act.item(), run3_act.item()

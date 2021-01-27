@@ -28,7 +28,8 @@ def train():
 
         for state, targets in trainloader:
             state = {key: value.to(device) for key, value in state.items()}
-            bat_dest, run1_dest, run2_dest, run3_dest, pred = model(**state)
+            bat_dest, run1_dest, run2_dest, run3_dest = model(**state, softmax=False)
+            pred = model.v(**state)
 
             loss = CELoss(bat_dest, clip(targets['bat_dest']).squeeze().to(device)) \
                  + CELoss(run1_dest, clip(targets['run1_dest']).squeeze().to(device)) \
@@ -49,10 +50,12 @@ def train():
         model.eval()
         epoch_loss = 0
         preds = []
+        bat_out_probs = []
 
         for state, targets in validloader:
             state = {key: value.to(device) for key, value in state.items()}
-            bat_dest, run1_dest, run2_dest, run3_dest, pred = model(**state)
+            bat_dest, run1_dest, run2_dest, run3_dest = model(**state, softmax=False)
+            pred = model.v(**state)
 
             loss = CELoss(bat_dest, clip(targets['bat_dest']).squeeze().to(device)) \
                  + CELoss(run1_dest, clip(targets['run1_dest']).squeeze().to(device)) \
@@ -63,6 +66,10 @@ def train():
             epoch_loss += loss.item() * pred.shape[0]
 
             preds += pred.tolist()
+
+            bat_out_probs += F.softmax(bat_dest, dim=1)[:, 0].tolist()
+
+        tb.add_histogram('bat_out_probs', np.array(bat_out_probs), epoch)
 
         epoch_loss /= len(validloader.dataset)
         tb.add_scalar('valid loss', epoch_loss, epoch)
@@ -89,14 +96,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()  # 자주 바뀌는 순.
     parser.add_argument('--dropout', type=float, default=0.5, metavar='F')
     parser.add_argument('--l2', type=float, default=1e-2, metavar='F')
-    parser.add_argument('--lr', type=float, default=2e-6, metavar='F')
+    parser.add_argument('--lr', type=float, default=1e-5, metavar='F')
     parser.add_argument('--result-ratio', type=float, default=1, metavar='F')
     parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
     parser.add_argument('--batch-size', type=int, default=512, metavar='N')
     parser.add_argument('--epochs', type=int, default=50, metavar='N')
     parser.add_argument('--patience', type=int, default=3, metavar='N')
     parser.add_argument('--seed', type=int, default=543, metavar='N')
-    parser.add_argument('--workers', type=int, default=4, metavar='N')
+    parser.add_argument('--workers', type=int, default=32, metavar='N')
     parser.add_argument('--cuda', type=int, default=1, metavar='N')
     args = parser.parse_args()
 

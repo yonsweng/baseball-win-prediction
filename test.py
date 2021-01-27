@@ -34,17 +34,18 @@ def test(env, loader, model, cuda, args, low=0, high=0, verbose=0):
                 steps += 1
 
                 state = {key: value.to(cuda) for key, value in state.items()}
-                bat_dest, run1_dest, run2_dest, run3_dest, pred = model(**state)
+                bat_dest, run1_dest, run2_dest, run3_dest = model(**state)
+                pred = model.v(**state)
                 pred = pred.squeeze()
 
                 if steps >= length:
                     local_y_pred.append(pred.item())
                     break
 
-                bat_act = Categorical(F.softmax(bat_dest.squeeze())).sample()
-                run1_act = Categorical(F.softmax(run1_dest.squeeze())).sample()
-                run2_act = Categorical(F.softmax(run2_dest.squeeze())).sample()
-                run3_act = Categorical(F.softmax(run3_dest.squeeze())).sample()
+                bat_act = Categorical(bat_dest.squeeze()).sample()
+                run1_act = Categorical(run1_dest.squeeze()).sample()
+                run2_act = Categorical(run2_dest.squeeze()).sample()
+                run3_act = Categorical(run3_dest.squeeze()).sample()
 
                 state, reward, done = env.step(bat_act, run1_act, run2_act, run3_act)
 

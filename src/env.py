@@ -98,9 +98,9 @@ class Env():
             self.state['home_score_ct'] += event_score_ct
 
         self.state['outs_ct'] += ((act_bat == 0)
-            + (self.state['base1_run_id'] != 0 and act_run1 == 0)
-            + (self.state['base2_run_id'] != 0 and act_run2 == 0)
-            + (self.state['base3_run_id'] != 0 and act_run3 == 0))
+            + int(self.state['base1_run_id'] != 0 and act_run1 == 0)
+            + int(self.state['base2_run_id'] != 0 and act_run2 == 0)
+            + int(self.state['base3_run_id'] != 0 and act_run3 == 0))
 
         self.move(act_bat, act_run1, act_run2, act_run3)
 
