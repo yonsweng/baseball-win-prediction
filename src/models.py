@@ -14,27 +14,30 @@ class Model(nn.Module):
 
         # input layer
         self.input = nn.Sequential(
-            nn.Linear(7 + 28 * emb_dim, 512),
+            nn.Linear(7 + 28 * emb_dim, 1024),
             nn.ReLU(),
             nn.Dropout(dropout)
         )
 
         # Shared layers
         self.dense = nn.Sequential(
-            nn.Linear(512, 256),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(512, 512),
             nn.ReLU(),
             nn.Dropout(dropout)
         )
 
         # Policy output
-        self.bat_dest = nn.Linear(256, 5)
-        self.run1_dest = nn.Linear(256, 5)
-        self.run2_dest = nn.Linear(256, 5)
-        self.run3_dest = nn.Linear(256, 5)
+        self.bat_dest = nn.Linear(512, 5)
+        self.run1_dest = nn.Linear(512, 5)
+        self.run2_dest = nn.Linear(512, 5)
+        self.run3_dest = nn.Linear(512, 5)
 
         # Pred output
         self.pred_out = nn.Sequential(
-            nn.Linear(256, 1),
+            nn.Linear(512, 1),
             nn.Sigmoid()
         )
 
