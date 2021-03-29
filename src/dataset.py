@@ -1,10 +1,22 @@
 import torch
 from torch.utils.data import Dataset
+from sklearn.preprocessing import MinMaxScaler
 
 
 class BaseballDataset(Dataset):
     def __init__(self, data):
         self.data = data
+
+        # # Scaling
+        # cols = [
+        #     'OUTS_CT',
+        #     'AWAY_SCORE_CT',
+        #     'HOME_SCORE_CT',
+        #     'INN_CT',
+        #     'AWAY_BAT_LINEUP_ID',
+        #     'HOME_BAT_LINEUP_ID'
+        # ]
+        # self.data[cols] = MinMaxScaler().fit_transform(self.data[cols])
 
     def __len__(self):
         return len(self.data)
