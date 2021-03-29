@@ -1,14 +1,8 @@
-'''
-Dataset
-'''
 import torch
 from torch.utils.data import Dataset
 
 
 class BaseballDataset(Dataset):
-    '''
-    BaseballDataset
-    '''
     def __init__(self, data):
         self.data = data
 
@@ -17,52 +11,32 @@ class BaseballDataset(Dataset):
 
     def __getitem__(self, idx):
         data = self.data.iloc[idx, :]
-
-        start_obs = {
+        state = {
+            'outs_ct': torch.tensor([data['OUTS_CT']], dtype=torch.float),
+            'bat_id': torch.tensor([data['BAT_ID']], dtype=torch.long),
+            'pit_id': torch.tensor([data['PIT_ID']], dtype=torch.long),
+            'fld_team_id': torch.tensor([data['AWAY_TEAM_ID'] if data['BAT_HOME_ID'] == 1 else data['HOME_TEAM_ID']], dtype=torch.long),
             'base1_run_id': torch.tensor([data['BASE1_RUN_ID']], dtype=torch.long),
             'base2_run_id': torch.tensor([data['BASE2_RUN_ID']], dtype=torch.long),
             'base3_run_id': torch.tensor([data['BASE3_RUN_ID']], dtype=torch.long),
-            'away_bat_lineup': torch.tensor([data['AWAY_BAT_LINEUP_ID']], dtype=torch.long),
-            'home_bat_lineup': torch.tensor([data['HOME_BAT_LINEUP_ID']], dtype=torch.long),
-            'away_pit_lineup': torch.Tensor([data['AWAY_PIT_LINEUP_ID']]),
-            'home_pit_lineup': torch.Tensor([data['HOME_PIT_LINEUP_ID']]),
-            'bat_home_id': torch.Tensor([data['BAT_HOME_ID']]),
-            'inn_ct': torch.Tensor([data['INN_CT']]),
-            'outs_ct': torch.Tensor([data['OUTS_CT']]),
-            'away_score_ct': torch.Tensor([data['AWAY_SCORE_CT']]),
-            'home_score_ct': torch.Tensor([data['HOME_SCORE_CT']])
-        }
-        end_obs = {
-            'base1_run_id': torch.tensor([data['END_BASE1_RUN_ID']], dtype=torch.long),
-            'base2_run_id': torch.tensor([data['END_BASE2_RUN_ID']], dtype=torch.long),
-            'base3_run_id': torch.tensor([data['END_BASE3_RUN_ID']], dtype=torch.long),
-            'away_bat_lineup': torch.tensor([data['END_AWAY_BAT_LINEUP_ID']], dtype=torch.long),
-            'home_bat_lineup': torch.tensor([data['END_HOME_BAT_LINEUP_ID']], dtype=torch.long),
-            'away_pit_lineup': torch.Tensor([data['END_AWAY_PIT_LINEUP_ID']]),
-            'home_pit_lineup': torch.Tensor([data['END_HOME_PIT_LINEUP_ID']]),
-            'bat_home_id': torch.Tensor([data['END_BAT_HOME_ID']]),
-            'inn_ct': torch.Tensor([data['END_INN_CT']]),
-            'outs_ct': torch.Tensor([data['END_OUTS_CT']]),
-            'away_score_ct': torch.Tensor([data['END_AWAY_SCORE_CT']]),
-            'home_score_ct': torch.Tensor([data['END_HOME_SCORE_CT']])
-        }
-        info = {
-            'away_start_bat_ids': torch.from_numpy(
-                data[[f'AWAY_START_BAT{i}_ID' for i in range(1, 10)]].values.astype(int)),
-            'home_start_bat_ids': torch.from_numpy(
-                data[[f'HOME_START_BAT{i}_ID' for i in range(1, 10)]].values.astype(int)),
-            'away_start_pit_id': torch.tensor([data['AWAY_START_PIT_ID']], dtype=torch.long),
-            'home_start_pit_id': torch.tensor([data['HOME_START_PIT_ID']], dtype=torch.long),
+            'away_score_ct': torch.tensor([data['AWAY_SCORE_CT']], dtype=torch.float),
+            'home_score_ct': torch.tensor([data['HOME_SCORE_CT']], dtype=torch.float),
+            'inn_ct': torch.tensor([data['INN_CT']], dtype=torch.float),
+            'bat_home_id': torch.tensor([data['BAT_HOME_ID']], dtype=torch.float),
+            'away_bat_lineup': torch.tensor([data['AWAY_BAT_LINEUP_ID']], dtype=torch.float),
+            'home_bat_lineup': torch.tensor([data['HOME_BAT_LINEUP_ID']], dtype=torch.float),
+            'away_start_bat_ids': torch.tensor(data[[f'AWAY_START_BAT{i}_ID' for i in range(1, 10)]].values.astype(int), dtype=torch.long),
+            'home_start_bat_ids': torch.tensor(data[[f'HOME_START_BAT{i}_ID' for i in range(1, 10)]].values.astype(int), dtype=torch.long),
+            'away_pit_id': torch.tensor([data['AWAY_PIT_ID']], dtype=torch.long),
+            'home_pit_id': torch.tensor([data['HOME_PIT_ID']], dtype=torch.long),
             'away_team_id': torch.tensor([data['AWAY_TEAM_ID']], dtype=torch.long),
             'home_team_id': torch.tensor([data['HOME_TEAM_ID']], dtype=torch.long)
         }
         targets = {
-            'reward': torch.Tensor([data['END_AWAY_SCORE_CT'] - data['AWAY_SCORE_CT']
-                                    if data['BAT_HOME_ID'] == 0
-                                    else data['END_HOME_SCORE_CT'] - data['HOME_SCORE_CT']]),
-            'done': torch.Tensor([data['GAME_END_FL']]),
-            'value_away': torch.Tensor([data['FINAL_AWAY_SCORE_CT'] - data['AWAY_SCORE_CT']]),
-            'value_home': torch.Tensor([data['FINAL_HOME_SCORE_CT'] - data['HOME_SCORE_CT']])
+            'bat_dest': torch.tensor([data['BAT_DEST_ID']], dtype=torch.long),
+            'run1_dest': torch.tensor([data['RUN1_DEST_ID']], dtype=torch.long),
+            'run2_dest': torch.tensor([data['RUN2_DEST_ID']], dtype=torch.long),
+            'run3_dest': torch.tensor([data['RUN3_DEST_ID']], dtype=torch.long),
+            'result': torch.tensor([data['AWAY_END_SCORE'] < data['HOME_END_SCORE']], dtype=torch.float)
         }
-
-        return start_obs, end_obs, info, targets
+        return state, targets

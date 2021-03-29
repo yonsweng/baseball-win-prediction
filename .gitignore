@@ -4,3 +4,4 @@ temp*
 input
 runs
 .pylintrc
+models
