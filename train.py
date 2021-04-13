@@ -6,7 +6,7 @@ import torch.multiprocessing as mp
 from BaseballDataset import get_train_data, get_valid_data
 from Env import Env
 from MCTS import MCTS
-from utils import batch, unzip_batch, select_action
+from utils import random_batch, unzip_batch, select_action
 from test import load_test_args, test
 
 
@@ -77,7 +77,7 @@ def main():
 
     epoch = 0
     while True:
-        for indice in batch(range(len(train_data)), args.train_batch_size):
+        for indice in random_batch(len(train_data), args.train_batch_size):
             epoch += 1
             print(f'Epoch {epoch}')
 

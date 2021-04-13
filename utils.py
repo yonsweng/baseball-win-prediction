@@ -1,10 +1,12 @@
 import numpy as np
+import random
 
 
-def batch(iterable, n=1):
-    length = len(iterable)
-    for ndx in range(0, length, n):
-        yield iterable[ndx:min(ndx + n, length)]
+def random_batch(n, batch_size=1):
+    indice = list(range(n))
+    random.shuffle(indice)
+    for start_idx in range(0, n, batch_size):
+        yield indice[start_idx:min(start_idx+batch_size, n)]
 
 
 def unzip_batch(batch):
