@@ -2,12 +2,12 @@ import torch
 import torch.nn as nn
 
 
-class BasicBlock(nn.Module):
+class ResBlock(nn.Module):
     def __init__(self, in_features, hidden_features):
-        super(BasicBlock, self).__init__()
+        super(ResBlock, self).__init__()
         self.linear1 = nn.Linear(in_features, hidden_features)
         self.relu = nn.ReLU(inplace=True)
-        self.linear2 = nn.Linear(hidden_features, hidden_features)
+        self.linear2 = nn.Linear(hidden_features, in_features)
 
     def forward(self, x):
         residual = x
@@ -21,16 +21,29 @@ class BasicBlock(nn.Module):
 
 class NNet(nn.Module):
     def __init__(self, n_batters, n_pitchers, n_teams,
-                 embedding_dim, in_features, hidden_features, out_features):
+                 float_features, long_features, policy_dim,
+                 emb_dim=64, hidden_features=512, res_features=512,
+                 n_shared_layers=2, n_policy_layers=2, n_value_layers=2):
         super(NNet, self).__init__()
-        self.bat_emb = nn.Embedding(n_batters, embedding_dim)
-        self.pit_emb = nn.Embedding(n_pitchers, embedding_dim)
-        self.team_emb = nn.Embedding(n_teams, embedding_dim)
-        self.block1 = BasicBlock(in_features, hidden_features)
-        self.block2 = BasicBlock(hidden_features, hidden_features)
-        self.block3 = BasicBlock(hidden_features, hidden_features)
-        self.block4 = BasicBlock(hidden_features, hidden_features)
-        self.linear = nn.Linear(hidden_features, out_features)
+        self.bat_emb = nn.Embedding(n_batters, emb_dim)
+        self.pit_emb = nn.Embedding(n_pitchers, emb_dim)
+        self.team_emb = nn.Embedding(n_teams, emb_dim)
+        self.shared_layers = nn.Sequential(
+            nn.Linear(float_features+long_features*emb_dim, hidden_features),
+            nn.ReLU(inplace=True),
+            *[ResBlock(hidden_features, res_features)
+              for _ in range(n_shared_layers)]
+        )
+        self.policy_layers = nn.Sequential(
+            *[ResBlock(hidden_features, res_features)
+              for _ in range(n_policy_layers)],
+            nn.Linear(hidden_features, policy_dim)
+        )
+        self.value_layers = nn.Sequential(
+            *[ResBlock(hidden_features, res_features)
+              for _ in range(n_value_layers)],
+            nn.Linear(hidden_features, 2)
+        )
 
     def forward(self, x):
         x = torch.cat([
@@ -39,9 +52,5 @@ class NNet(nn.Module):
             torch.flatten(self.pit_emb(x['pit']), start_dim=1),
             torch.flatten(self.team_emb(x['team']), start_dim=1)
         ], dim=1)
-        x = self.block1(x)
-        x = self.block2(x)
-        x = self.block3(x)
-        x = self.block4(x)
-        x = self.linear(x)
-        return x
+        x = self.shared_layers(x)
+        return self.policy_layers(x), self.value_layers(x)
