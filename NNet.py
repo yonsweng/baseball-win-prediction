@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class ResBlock(nn.Module):
@@ -45,7 +46,7 @@ class NNet(nn.Module):
             nn.Linear(hidden_features, 2)
         )
 
-    def forward(self, x):
+    def forward(self, x: dict[str, torch.Tensor]):
         x = torch.cat([
             x['float'],
             torch.flatten(self.bat_emb(x['bat']), start_dim=1),
@@ -54,3 +55,16 @@ class NNet(nn.Module):
         ], dim=1)
         x = self.shared_layers(x)
         return self.policy_layers(x), self.value_layers(x)
+
+    def predict(self, x: dict[str, torch.Tensor]):
+        '''
+        Non-batch prediction to give numpy arrays.
+        Return:
+            policy: np.array(n_actions)
+            value: (float, float)
+        '''
+        policy, value = self.forward(x)
+        policy = F.softmax(policy, dim=1)
+        value = value.detach().cpu().numpy().squeeze()
+        return (policy.detach().cpu().numpy().squeeze(),
+                (value[0], value[1]))
