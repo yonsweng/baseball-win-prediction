@@ -1,3 +1,6 @@
+import numpy as np
+
+
 class ActionSpace:
     def __init__(self):
         self.dests_to_action = {}
@@ -47,3 +50,12 @@ class ActionSpace:
 
     def to_dests(self, action):
         return self.action_to_dests[action]
+
+    def get_valid_moves(self, state: dict[str, int]) -> np.array:
+        valids = np.ones(self.__len__(), dtype=np.float32)
+        for dest, action in self.dests_to_action.items():
+            for i in range(1, 4):
+                if state[f'BASE{i}_RUN_ID'] == 0 and dest[i] != 0:
+                    valids[action] = 0
+                    break
+        return valids
