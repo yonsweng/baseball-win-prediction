@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -201,6 +202,24 @@ def preprocess(data):
     return data[used_columns]
 
 
+def save_data_info(data):
+    ''' Make and save data_info.json. '''
+
+    data['HOME_TEAM_ID'] = data['GAME_ID'].apply(lambda x: x[:3])
+
+    data_info = {
+        'n_batters': len(np.unique(
+            data[['BAT_ID', 'BASE1_RUN_ID', 'BASE2_RUN_ID', 'BASE3_RUN_ID']]
+            .fillna('').values.reshape(-1))),
+        'n_pitchers': len(np.unique(data['PIT_ID'])),
+        'n_teams': len(np.unique(
+            data[['AWAY_TEAM_ID', 'HOME_TEAM_ID']].values.reshape(-1)))
+    }
+
+    with open('data_info.json', 'w') as f:
+        json.dump(data_info, f)
+
+
 def split_by_game(data):
     unique_game_ids = data['GAME_ID'].unique()
 
@@ -234,6 +253,8 @@ def drop_cols(data):
 def main():
     data = pd.read_csv('input/mlbplaybyplay2010s/all2010.csv',
                        low_memory=False)
+
+    save_data_info(data)
 
     data = preprocess(data)
 
