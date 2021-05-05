@@ -10,12 +10,11 @@ EPS = 1e-8
 
 
 class MCTS:
-    def __init__(self, device, nnet, action_space, args):
-        self.env = Env(action_space)
-        self.device = device
-        self.nnet = nnet
+    def __init__(self, action_space, args):
         self.action_space = action_space
         self.args = args
+
+        self.env = Env(action_space)
 
         self.Qsa = {}  # stores Q values for s,a (as defined in the paper)
         self.Nsa = {}  # stores #times edge s,a was visited
@@ -25,9 +24,10 @@ class MCTS:
         self.Es = {}  # stores game.getGameEnded ended for board s
         self.Vs = {}  # stores game.getValidMoves for board s
 
-    def get_policy(self, state) -> np.array:
+    def get_policy(self, state, nnet) -> np.array:
+        device = next(nnet.parameters()).device
         for _ in range(self.args.num_mcts_sims):
-            self.search(state, self.args.mcts_max_depth)
+            self.search(state, self.args.mcts_max_depth, nnet, device)
 
         s = str(state)  # the string representation of state
         counts = [self.Nsa[(s, a)] if (s, a) in self.Nsa else 0
@@ -37,7 +37,7 @@ class MCTS:
         probs = [x / counts_sum for x in counts]
         return np.array(probs, dtype=np.float32)
 
-    def search(self, state, remaining_depth):
+    def search(self, state, remaining_depth, nnet, device):
         state = self.env.reset(state)
         s = str(state)
 
@@ -50,12 +50,12 @@ class MCTS:
 
         # max depth
         if remaining_depth == 0:
-            _, v = self.nnet.predict(to_input(state, self.device))
+            _, v = nnet.predict(to_input(state, device))
             return self.transform_value(state, v)
 
         # leaf node
         if s not in self.Ps:  # if s is not visited yet.
-            self.Ps[s], v = self.nnet.predict(to_input(state, self.device))
+            self.Ps[s], v = nnet.predict(to_input(state, device))
             v = self.transform_value(state, v)
             valids = self.action_space.get_valid_moves(state)
             self.Ps[s] = self.Ps[s] * valids
@@ -91,7 +91,7 @@ class MCTS:
         a = best_act
         next_s, _, _, _ = self.env.step(a)
 
-        v = self.search(next_s, remaining_depth - 1)
+        v = self.search(next_s, remaining_depth - 1, nnet, device)
 
         if (s, a) in self.Qsa:
             self.Qsa[(s, a)] = (self.Nsa[(s, a)] * self.Qsa[(s, a)] + v) \

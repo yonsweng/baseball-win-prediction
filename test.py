@@ -1,11 +1,12 @@
 import argparse
 import numpy as np
 import torch
+from torch.utils.tensorboard import SummaryWriter
 from sklearn.metrics import accuracy_score
 from time import time
 from ActionSpace import ActionSpace
-from utils import sequential_batch, to_batch_input, set_seeds, get_test_data, \
-                  create_nnet
+from utils import sequential_dataset_batch, to_input_batch, set_seeds, \
+                  get_test_data, create_nnet
 
 
 def load_test_args(parser):
@@ -40,12 +41,11 @@ def judge_winning_team(away_scores, home_scores):
                 np.where(away_scores > home_scores, -1, 1)))
 
 
-def test(data, nnet, device, args):
+def test(data, nnet, args, tb, epoch, device=torch.device('cuda:0')):
     y_true, y_pred = [], []
 
-    for indice in sequential_batch(len(data), args.test_batch_size):
-        batch = data[indice]
-        input = to_batch_input(batch, device)
+    for batch in sequential_dataset_batch(data, args.test_batch_size):
+        input = to_input_batch(batch, device)
         with torch.no_grad():
             _, value = nnet(input)
         y_true += judge_winning_team(batch['AWAY_END_SCORE_CT'],
@@ -54,6 +54,7 @@ def test(data, nnet, device, args):
 
     accuracy = accuracy_score(y_true, y_pred)
     print(f'accuracy: {accuracy:.3f}')
+    tb.add_scalar('accuracy', accuracy, epoch)
 
 
 def main():
@@ -65,12 +66,12 @@ def main():
 
     test_data = get_test_data()
 
-    device = torch.device('cuda:0')
-
     nnet = create_nnet(test_data, args)
 
+    tb = SummaryWriter()
+
     start_time = time()
-    test(test_data, nnet, device, args)
+    test(test_data, nnet, args, tb, epoch=0)
     print(f'test time: {time() - start_time:.3f} sec.')
 
 

@@ -42,7 +42,13 @@ def random_batch(n, batch_size=1):
         yield indice[start_idx:min(start_idx+batch_size, n)]
 
 
-def sequential_batch(data, batch_size=1):
+def sequential_dataset_batch(data, batch_size=1):
+    n = len(data)
+    for start_idx in range(0, n, batch_size):
+        yield data[range(start_idx, min(start_idx+batch_size, n))]
+
+
+def sequential_list_batch(data, batch_size=1):
     n = len(data)
     for start_idx in range(0, n, batch_size):
         yield data[start_idx:min(start_idx+batch_size, n)]
@@ -84,7 +90,7 @@ def to_input(state, device='cpu'):
     }
 
 
-def to_batch_input(state, device='cpu'):
+def to_input_batch(state, device='cpu'):
     away_bat_ids = np.stack([state[f'AWAY_BAT{i}_ID'] for i in range(1, 10)])
     home_bat_ids = np.stack([state[f'HOME_BAT{i}_ID'] for i in range(1, 10)])
     return {
