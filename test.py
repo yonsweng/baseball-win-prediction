@@ -1,111 +1,79 @@
-import os
 import argparse
-import random
-import torch.nn.functional as F
-from torch.distributions import Categorical
-from sklearn.metrics import accuracy_score, precision_score, recall_score, confusion_matrix
-from src.models import *
-from src.utils import *
-from src.env import *
+import numpy as np
+import torch
+from torch.utils.tensorboard import SummaryWriter
+from sklearn.metrics import accuracy_score
+from time import time
+from ActionSpace import ActionSpace
+from utils import sequential_dataset_batch, to_input_batch, set_seeds, \
+                  get_test_data, create_nnet
 
 
-def test(env, loader, model, cuda, args, low=0, high=0, verbose=0):
-    print(f'Test started')
-    model.eval()
-
-    # get y_true
-    y_true = []
-    for ori_state, targets in loader:
-        y_true += targets['result'][0].tolist()
-    y_true = np.array(y_true)
-
-    y_pred = np.zeros(len(loader.dataset))
-
-    for i_simul in range(args.simul):
-        local_y_pred = []
-
-        for ori_state, targets in loader:
-            steps = 0
-
-            length = random.randint(low, high)
-            state = env.reset(ori_state, targets)
-
-            while True:
-                steps += 1
-
-                state = {key: value.to(cuda) for key, value in state.items()}
-                bat_dest, run1_dest, run2_dest, run3_dest = model(**state)
-                pred = model.v(**state)
-                pred = pred.squeeze()
-
-                if steps >= length:
-                    local_y_pred.append(pred.item())
-                    break
-
-                bat_act = Categorical(bat_dest.squeeze()).sample()
-                run1_act = Categorical(run1_dest.squeeze()).sample()
-                run2_act = Categorical(run2_dest.squeeze()).sample()
-                run3_act = Categorical(run3_dest.squeeze()).sample()
-
-                state, reward, done = env.step(bat_act, run1_act, run2_act, run3_act)
-
-                if done:
-                    local_y_pred.append(float((state['away_score_ct'] < state['home_score_ct']).item()))
-                    break
-
-        y_pred += np.array(local_y_pred)
-
-    y_pred /= args.simul
-
-    # print(y_pred)
-    # print(y_true)
-
-    threshold = 0.5
-    precision = precision_score(y_true, y_pred > threshold)
-    recall = recall_score(y_true, y_pred > threshold)
-    accuracy = accuracy_score(y_true, y_pred > threshold)
-    print(f'precision: {precision:.3f} \trecall: {recall:.3f} \taccuracy: {accuracy:.3f}')
-    print(confusion_matrix(y_true, y_pred > threshold))
-
-    return precision, recall, accuracy
+def load_test_args(parser):
+    parser.add_argument('--test_size', metavar='N', type=int, default=100,
+                        help='the number of tests')
+    parser.add_argument('--test_batch_size', metavar='N', type=int,
+                        default=4096,
+                        help='the number of episodes to simulate for an epoch')
+    parser.add_argument('--seed', metavar='N', type=int, default=2021,
+                        help='the random seed')
+    parser.add_argument('--n_actions', metavar='N', type=int,
+                        default=len(ActionSpace()),
+                        help='the number of actions')
+    parser.add_argument('--n_gpus', metavar='N', type=int,
+                        default=torch.cuda.device_count(),
+                        help='the number of GPUs to use')
+    return parser
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()  # 자주 바뀌는 순.
-    parser.add_argument('--dropout', type=float, default=0.2, metavar='F')
-    parser.add_argument('--l2', type=float, default=1e-4, metavar='F')
-    parser.add_argument('--lr', type=float, default=1e-5, metavar='F')
-    parser.add_argument('--warmup', type=int, default=1000, metavar='N')
-    parser.add_argument('--emb-dim', type=int, default=32, metavar='N')
-    parser.add_argument('--batch-size', type=int, default=512, metavar='N')
-    parser.add_argument('--epochs', type=int, default=50, metavar='N')
-    parser.add_argument('--patience', type=int, default=3, metavar='N')
-    parser.add_argument('--seed', type=int, default=543, metavar='N')
-    parser.add_argument('--workers', type=int, default=16, metavar='N')
-    parser.add_argument('--cuda', type=int, default=1, metavar='N')
-    parser.add_argument('--simul', type=int, default=1, metavar='N')  # should be odd
-    parser.add_argument('--model', type=str, default='', metavar='S')
-    parser.add_argument('--min', type=int, default=0, metavar='N')
-    parser.add_argument('--max', type=int, default=0, metavar='N')
+def judge_winning_team(away_scores, home_scores):
+    '''
+    Return:
+        list([who_won, ...])
+        who_won:
+            -1: away won, 0: draw, 1: home won
+    '''
+    if torch.is_tensor(away_scores):
+        away_scores = away_scores.cpu().numpy()
+    if torch.is_tensor(home_scores):
+        home_scores = home_scores.cpu().numpy()
+    return list(np.where(away_scores == home_scores, 0,
+                np.where(away_scores > home_scores, -1, 1)))
+
+
+def test(data, nnet, args, tb, epoch, device=torch.device('cuda:0')):
+    y_true, y_pred = [], []
+
+    for batch in sequential_dataset_batch(data, args.test_batch_size):
+        input = to_input_batch(batch, device)
+        with torch.no_grad():
+            _, value = nnet(input)
+        y_true += judge_winning_team(batch['AWAY_END_SCORE_CT'],
+                                     batch['HOME_END_SCORE_CT'])
+        y_pred += judge_winning_team(value[:, 0], value[:, 1])
+
+    accuracy = accuracy_score(y_true, y_pred)
+    print(f'accuracy: {accuracy:.3f}')
+    tb.add_scalar('accuracy', accuracy, epoch)
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Test argument parser')
+    parser = load_test_args(parser)
     args = parser.parse_args()
 
-    torch.manual_seed(args.seed)
-    random.seed(args.seed)
+    set_seeds(args.seed)
 
-    file_path = args.model
+    test_data = get_test_data()
 
-    tag, device = init(args)
-    data = load_data()
-    num_bats, num_pits, num_teams = count_numbers(data)
-    trainloader, validloader, tnewloader, vnewloader, testloader = get_dataloaders(data, args)
+    nnet = create_nnet(test_data, args)
 
-    print(f'# of plates: {len(trainloader.dataset)}')
-    print(f'# of train games: {len(tnewloader.dataset)}')
-    print(f'# of valid games: {len(vnewloader.dataset)}')
-    print(f'# of test games: {len(testloader.dataset)}')
+    tb = SummaryWriter()
 
-    env = Env()
+    start_time = time()
+    test(test_data, nnet, args, tb, epoch=0)
+    print(f'test time: {time() - start_time:.3f} sec.')
 
-    model = Model(num_bats, num_pits, num_teams, args.emb_dim, args.dropout, device).to(device)
-    model.load_state_dict(torch.load(file_path))
-    precision, recall, accuracy = test(env, testloader, model, device, args, args.min, args.max, 1)
+
+if __name__ == '__main__':
+    main()

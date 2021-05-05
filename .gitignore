@@ -1,7 +1,7 @@
-.vscode
 __pycache__
-temp*
+.vscode
 input
-runs
-.pylintrc
 models
+runs
+temp*
+data_info.json
