@@ -23,6 +23,8 @@ def load_test_args(parser):
     parser.add_argument('--n_gpus', metavar='N', type=int,
                         default=torch.cuda.device_count(),
                         help='the number of GPUs to use')
+    parser.add_argument('--load', metavar='S', type=str,
+                        default='pretrained.pt', help='a model to load')
     return parser
 
 
@@ -33,10 +35,6 @@ def judge_winning_team(away_scores, home_scores):
         who_won:
             -1: away won, 0: draw, 1: home won
     '''
-    if torch.is_tensor(away_scores):
-        away_scores = away_scores.cpu().numpy()
-    if torch.is_tensor(home_scores):
-        home_scores = home_scores.cpu().numpy()
     return list(np.where(away_scores == home_scores, 0,
                 np.where(away_scores > home_scores, -1, 1)))
 
@@ -46,15 +44,21 @@ def test(data, nnet, args, tb, epoch, device=torch.device('cuda:0')):
 
     for batch in sequential_dataset_batch(data, args.test_batch_size):
         input = to_input_batch(batch, device)
+
         with torch.no_grad():
             _, value = nnet(input)
+
         y_true += judge_winning_team(batch['AWAY_END_SCORE_CT'],
                                      batch['HOME_END_SCORE_CT'])
-        y_pred += judge_winning_team(value[:, 0], value[:, 1])
+
+        away_pred_scores = value[:, 0].cpu().numpy() + batch['AWAY_SCORE_CT']
+        home_pred_scores = value[:, 1].cpu().numpy() + batch['HOME_SCORE_CT']
+        y_pred += judge_winning_team(away_pred_scores, home_pred_scores)
 
     accuracy = accuracy_score(y_true, y_pred)
     print(f'accuracy: {accuracy:.3f}')
     tb.add_scalar('accuracy', accuracy, epoch)
+    return accuracy
 
 
 def main():
@@ -67,6 +71,8 @@ def main():
     test_data = get_test_data()
 
     nnet = create_nnet(test_data, args)
+
+    nnet.module.load_state_dict(torch.load(f'models/{args.load}'))
 
     tb = SummaryWriter()
 
