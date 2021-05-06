@@ -53,7 +53,7 @@ class Env:
                 self.move_runners(dests)
                 self.change_batter()
 
-        return self.state, tuple(runs_scored), done, None
+        return self.state.copy(), tuple(runs_scored), done, None
 
     def get_runs_scored(self, dests):
         runs_scored = sum([dest >= 4 for dest in dests])

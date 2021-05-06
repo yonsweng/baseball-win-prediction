@@ -46,7 +46,10 @@ class ActionSpace:
         return self.action_cnt
 
     def to_action(self, dests):
-        return self.dests_to_action[dests]
+        if dests in self.dests_to_action:
+            return self.dests_to_action[dests]
+        else:
+            return 0
 
     def to_dests(self, action):
         return self.action_to_dests[action]
