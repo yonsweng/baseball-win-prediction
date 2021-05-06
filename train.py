@@ -23,18 +23,18 @@ from utils import select_action, set_seeds, copy_nnet, to_input_batch, \
 
 def load_train_args(parser):
     parser.add_argument('--lr', metavar='F', type=float,
-                        default=1e-5, help='the learning rate')
+                        default=1e-6, help='the learning rate')
     parser.add_argument('--examples_len', metavar='N', type=int,
-                        default=100000,
+                        default=50000,
                         help='the maximum length of train examples')
     parser.add_argument('--n_cpus', metavar='N', type=int,
                         default=16,
                         help='the number of processors to use')
     parser.add_argument('--train_batch_size', metavar='N', type=int,
-                        default=16*20,
+                        default=16*25,
                         help='the number of episodes to simulate for an epoch')
     parser.add_argument('--update_epochs', metavar='N', type=int,
-                        default=20,
+                        default=10,
                         help='the number of epochs to update the neural net')
 
     # MCTS arguments
@@ -57,7 +57,7 @@ def make_an_episode(env, mcts, action_space, nnet, state):
         return examples
 
     state = env.reset(state)
-    while True:
+    for _ in range(100):  # max 100 steps
         policy = mcts.get_policy(state, nnet)
         action = select_action(policy, state, action_space)
 
@@ -152,7 +152,9 @@ def main():
     valid_data = get_valid_data()
 
     nnet = create_nnet(train_data, args)
+    nnet.module.load_state_dict(torch.load(f'models/{args.load}'))
     nnets = create_nnets(train_data, args, n_nnets=torch.cuda.device_count())
+
     optimizer = Adam(nnet.parameters(), lr=args.lr)
     policy_loss_fn = nn.KLDivLoss(reduction='batchmean')
     value_loss_fn = nn.MSELoss()
