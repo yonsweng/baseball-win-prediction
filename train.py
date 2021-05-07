@@ -31,7 +31,7 @@ def load_train_args(parser):
                         default=16,
                         help='the number of processors to use')
     parser.add_argument('--train_batch_size', metavar='N', type=int,
-                        default=16*25,
+                        default=16*20,
                         help='the number of episodes to simulate for an epoch')
     parser.add_argument('--update_epochs', metavar='N', type=int,
                         default=10,
@@ -61,12 +61,14 @@ def make_an_episode(env, mcts, action_space, nnet, state):
         policy = mcts.get_policy(state, nnet)
         action = select_action(policy, state, action_space)
 
+        prev_state = state.copy()
+
         state, runs_scored, done, _ = env.step(action)
 
         curr_scores[0] += runs_scored[0]
         curr_scores[1] += runs_scored[1]
 
-        tmp_examples.append((state, policy, tuple(curr_scores)))
+        tmp_examples.append((prev_state, policy, tuple(curr_scores)))
 
         if done:
             break
