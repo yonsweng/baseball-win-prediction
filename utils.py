@@ -54,6 +54,23 @@ def sequential_list_batch(data, batch_size=1):
         yield data[start_idx:min(start_idx+batch_size, n)]
 
 
+def unzip_batch(batch):
+    return [{column: batch[column][i] for column in batch}
+            for i in range(len(batch[list(batch.keys())[0]]))]
+
+
+def zip_batch(batch):
+    zipped = {}
+    for state in batch:
+        for key, value in state.items():
+            if key not in zipped:
+                zipped[key] = []
+            zipped[key].append(value)
+    for key in zipped:
+        zipped[key] = np.array(zipped[key])
+    return zipped
+
+
 def select_action(policy: np.array, state, action_space) -> int:
     valids = action_space.get_valid_moves(state)
     policy = policy * valids
