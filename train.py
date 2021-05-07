@@ -25,7 +25,7 @@ def load_train_args(parser):
     parser.add_argument('--lr', metavar='F', type=float,
                         default=1e-6, help='the learning rate')
     parser.add_argument('--examples_len', metavar='N', type=int,
-                        default=50000,
+                        default=100000,
                         help='the maximum length of train examples')
     parser.add_argument('--n_cpus', metavar='N', type=int,
                         default=16,
