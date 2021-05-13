@@ -53,7 +53,7 @@ class Env:
                 self.move_runners(dests)
                 self.change_batter()
 
-        return self.state, tuple(runs_scored), done, None
+        return self.state.copy(), tuple(runs_scored), done, None
 
     def get_runs_scored(self, dests):
         runs_scored = sum([dest >= 4 for dest in dests])
@@ -86,7 +86,7 @@ class Env:
                 state['AWAY_SCORE_CT'] > state['HOME_SCORE_CT']:
             done = True  # n(>=9)회말 3아웃 원정팀 이기는 중
         elif state['INN_CT'] >= 12 and state['BAT_HOME_ID'] == 1 and\
-                state['OUTS_CT'] == 3:
+                state['OUTS_CT'] >= 3:
             done = True  # 12회말 3아웃
 
         if done:

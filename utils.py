@@ -23,14 +23,14 @@ def get_train_data():
 
 def get_valid_data():
     data = pd.read_csv(
-        'input/mlbplaybyplay2010s_preprocessed/all2010_train.csv',
+        'input/mlbplaybyplay2010s_preprocessed/all2010_valid.csv',
         low_memory=False)
     return BaseballDataset(data)
 
 
 def get_test_data():
     data = pd.read_csv(
-        'input/mlbplaybyplay2010s_preprocessed/all2010_train.csv',
+        'input/mlbplaybyplay2010s_preprocessed/all2010_test.csv',
         low_memory=False)
     return BaseballDataset(data)
 
@@ -52,6 +52,23 @@ def sequential_list_batch(data, batch_size=1):
     n = len(data)
     for start_idx in range(0, n, batch_size):
         yield data[start_idx:min(start_idx+batch_size, n)]
+
+
+def unzip_batch(batch):
+    return [{column: batch[column][i] for column in batch}
+            for i in range(len(batch[list(batch.keys())[0]]))]
+
+
+def zip_batch(batch):
+    zipped = {}
+    for state in batch:
+        for key, value in state.items():
+            if key not in zipped:
+                zipped[key] = []
+            zipped[key].append(value)
+    for key in zipped:
+        zipped[key] = np.array(zipped[key])
+    return zipped
 
 
 def select_action(policy: np.array, state, action_space) -> int:
