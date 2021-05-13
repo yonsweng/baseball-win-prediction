@@ -20,6 +20,74 @@ class ResBlock(nn.Module):
         return out
 
 
+class Represent(nn.Module):
+    def __init__(self, batters, pitchers, teams, float_features, long_features,
+                 out_features, embedding_dim, hidden_features, num_blocks):
+        super().__init__()
+
+        self.bat_emb = nn.Embedding(batters, embedding_dim)
+        self.pit_emb = nn.Embedding(pitchers, embedding_dim)
+        self.team_emb = nn.Embedding(teams, embedding_dim)
+
+        in_features = float_features + long_features * embedding_dim
+        self.linear1 = nn.Linear(in_features, hidden_features)
+        self.res_blocks = nn.Sequential(
+            *(ResBlock(hidden_features, hidden_features)
+              for _ in range(num_blocks))
+        )
+        self.linear2 = nn.Linear(hidden_features, out_features)
+
+    def forward(self, x: dict[str, torch.Tensor]):
+        x = torch.cat([
+            x['float'],
+            torch.flatten(self.bat_emb(x['bat']), start_dim=1),
+            torch.flatten(self.pit_emb(x['pit']), start_dim=1),
+            torch.flatten(self.team_emb(x['team']), start_dim=1)
+        ], dim=1)
+        x = self.linear1(x)
+        x = F.relu(x, inplace=True)
+        x = self.res_blocks(x)
+        x = self.linear2(x)
+        return x
+
+
+class IsDone(nn.Module):
+    def __init__(self, in_features, hidden_features, num_blocks):
+        super().__init__()
+        self.linear1 = nn.Linear(in_features, hidden_features)
+        self.res_blocks = nn.Sequential(
+            *(ResBlock(hidden_features, hidden_features)
+              for _ in range(num_blocks))
+        )
+        self.linear2 = nn.Linear(hidden_features, 1)
+
+    def forward(self, x):
+        x = self.linear1(x)
+        x = F.relu(x, inplace=True)
+        x = self.res_blocks(x)
+        x = self.linear2(x)
+        x = F.sigmoid(x)
+        return x
+
+
+class Predict(nn.Module):
+    def __init__(self, in_features, hidden_features, num_blocks):
+        super().__init__()
+        self.linear1 = nn.Linear(in_features, hidden_features)
+        self.res_blocks = nn.Sequential(
+            *(ResBlock(hidden_features, hidden_features)
+              for _ in range(num_blocks))
+        )
+        self.linear2 = nn.Linear(hidden_features, 2)
+
+    def forward(self, x):
+        x = self.linear1(x)
+        x = F.relu(x, inplace=True)
+        x = self.res_blocks(x)
+        x = self.linear2(x)
+        return x
+
+
 class NNet(nn.Module):
     def __init__(self, n_batters, n_pitchers, n_teams,
                  float_features, long_features, policy_dim,
