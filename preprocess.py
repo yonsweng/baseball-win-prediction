@@ -62,9 +62,14 @@ def add_bat_ids(data):
                 away_bat_ids[row['BAT_LINEUP_ID'] - 1] = row['BAT_ID']
                 if not have_away_bat_id:
                     have_away_bat_id = True
-                    away_bat_ids_arr[game_new_index:index] = \
-                        np.array(away_bat_ids).reshape(1, -1).repeat(
-                            index-game_new_index, axis=0)
+
+                    bat_lineup_id = 1
+                    for j in range(game_new_index, index):
+                        if data['BAT_HOME_ID'].iat[j] == 0:
+                            bat_lineup_id = data['BAT_LINEUP_ID'].iat[j]
+                        away_bat_ids_arr[j] = \
+                            away_bat_ids[bat_lineup_id-1:] + \
+                            away_bat_ids[:bat_lineup_id-1]
             else:
                 away_bat_ids.append(row['BAT_ID'])
         else:                        # Home team batting
@@ -72,15 +77,22 @@ def add_bat_ids(data):
                 home_bat_ids[row['BAT_LINEUP_ID'] - 1] = row['BAT_ID']
                 if not have_home_bat_id:
                     have_home_bat_id = True
-                    home_bat_ids_arr[game_new_index:index] = \
-                        np.array(home_bat_ids).reshape(1, -1).repeat(
-                            index-game_new_index, axis=0)
+
+                    bat_lineup_id = 1
+                    for j in range(game_new_index, index):
+                        if data['BAT_HOME_ID'].iat[j] == 1:
+                            bat_lineup_id = data['BAT_LINEUP_ID'].iat[j]
+                        home_bat_ids_arr[j] = \
+                            home_bat_ids[bat_lineup_id-1:] + \
+                            home_bat_ids[:bat_lineup_id-1]
             else:
                 home_bat_ids.append(row['BAT_ID'])
         if len(away_bat_ids) == 9:
-            away_bat_ids_arr[index] = away_bat_ids
+            away_bat_ids_arr[index] = away_bat_ids[row['BAT_LINEUP_ID']-1:] \
+                + away_bat_ids[:row['BAT_LINEUP_ID']-1]
         if len(home_bat_ids) == 9:
-            home_bat_ids_arr[index] = home_bat_ids
+            home_bat_ids_arr[index] = home_bat_ids[row['BAT_LINEUP_ID']-1:] \
+                + home_bat_ids[:row['BAT_LINEUP_ID']-1]
 
     for i in range(9):
         data[f'AWAY_BAT{i+1}_ID'] = away_bat_ids_arr[:, i]
@@ -246,7 +258,7 @@ def split_data(data):
 
 
 def drop_cols(data):
-    columns_to_drop = ['GAME_ID', 'GAME_NEW_FL']
+    columns_to_drop = ['GAME_ID']
     return data.drop(columns_to_drop, 'columns')
 
 
