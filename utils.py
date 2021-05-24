@@ -5,7 +5,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from BaseballDataset import BaseballDataset
-from NNet import NNet
+from NNet import Represent, IsDone, Predict
 
 
 def set_seeds(seed):
@@ -14,21 +14,21 @@ def set_seeds(seed):
     np.random.seed(seed)
 
 
-def get_train_data():
+def get_train_dataset():
     data = pd.read_csv(
         'input/mlbplaybyplay2010s_preprocessed/all2010_train.csv',
         low_memory=False)
     return BaseballDataset(data)
 
 
-def get_valid_data():
+def get_valid_dataset():
     data = pd.read_csv(
         'input/mlbplaybyplay2010s_preprocessed/all2010_valid.csv',
         low_memory=False)
     return BaseballDataset(data)
 
 
-def get_test_data():
+def get_test_dataset():
     data = pd.read_csv(
         'input/mlbplaybyplay2010s_preprocessed/all2010_test.csv',
         low_memory=False)
@@ -155,22 +155,41 @@ def create_nnet(data, args):
     return nn.DataParallel(nnet)
 
 
-def create_nnets(data, args, n_nnets=1):
+def create_nnets(data, args):
     with open('data_info.json', 'r') as f:
         data_info = json.load(f)
 
-    input = to_input(data[0])
+    features = data[0][0]
     long_features = \
-        input['bat'].shape[1] + input['pit'].shape[1] + input['team'].shape[1]
+        features['bat'].shape[1] + \
+        features['pit'].shape[1] + \
+        features['team'].shape[1]
 
-    return [NNet(
-        n_batters=data_info['n_batters'],
-        n_pitchers=data_info['n_pitchers'],
-        n_teams=data_info['n_teams'],
-        float_features=input['float'].shape[1],
-        long_features=long_features,
-        policy_dim=args.n_actions
-    ).to(torch.device(f'cuda:{i % args.n_gpus}')) for i in range(n_nnets)]
+    represent = Represent(
+        data_info['n_batters'],
+        data_info['n_pitchers'],
+        data_info['n_teams'],
+        features['float'].shape[1],
+        long_features,
+        args.represent_size,
+        args.embedding_size,
+        args.hidden_size,
+        args.num_blocks
+    )
+
+    is_done = IsDone(
+        args.represent_size,
+        args.hidden_size,
+        args.num_blocks
+    )
+
+    predict = Predict(
+        args.represent_size,
+        args.hidden_size,
+        args.num_blocks
+    )
+
+    return represent, is_done, predict
 
 
 def copy_nnet(nnet, nnets):

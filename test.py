@@ -9,15 +9,15 @@ from tqdm import tqdm
 from ActionSpace import ActionSpace
 from Env import Env
 from utils import sequential_dataset_batch, to_input_batch, set_seeds, \
-                  get_test_data, create_nnet, unzip_batch, zip_batch
+                  get_test_dataset, create_nnet, unzip_batch, zip_batch
 
 
 def load_test_args(parser):
     parser.add_argument('--test_size', metavar='N', type=int, default=100,
                         help='the number of tests')
     parser.add_argument('--test_batch_size', metavar='N', type=int,
-                        default=4096,
-                        help='the number of episodes to simulate for an epoch')
+                        default=512,
+                        help='the batch size for test')
     parser.add_argument('--seed', metavar='N', type=int, default=2021,
                         help='the random seed')
     parser.add_argument('--n_actions', metavar='N', type=int,
@@ -124,7 +124,7 @@ def main():
 
     set_seeds(args.seed)
 
-    test_data = get_test_data()
+    test_data = get_test_dataset()
 
     nnet = create_nnet(test_data, args)
 

@@ -252,7 +252,7 @@ def drop_rows(data):
 
 def split_data(data):
     train_data, valid_data, test_data = split_by_game(data)
-    valid_data = drop_rows(valid_data)
+    # valid_data = drop_rows(valid_data)
     test_data = drop_rows(test_data)
     return train_data, valid_data, test_data
 

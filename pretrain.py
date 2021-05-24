@@ -5,7 +5,7 @@ from torch.optim import Adam
 from torch.utils.tensorboard.writer import SummaryWriter
 from ActionSpace import ActionSpace
 from test import load_test_args, test
-from utils import get_train_data, get_valid_data, get_test_data, set_seeds, \
+from utils import get_train_dataset, get_valid_dataset, get_test_dataset, set_seeds, \
                   create_nnet, random_batch, to_input_batch
 
 
@@ -50,9 +50,9 @@ def main():
 
     set_seeds(args.seed)
 
-    train_data = get_train_data()
-    valid_data = get_valid_data()
-    test_data = get_test_data()
+    train_data = get_train_dataset()
+    valid_data = get_valid_dataset()
+    test_data = get_test_dataset()
 
     nnet = create_nnet(train_data, args)
 

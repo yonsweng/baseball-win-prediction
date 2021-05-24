@@ -1,148 +1,57 @@
 import argparse
-from collections import deque
-from functools import partial
-from itertools import cycle
-from tqdm import tqdm
-import multiprocessing.pool as mpp
-import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.multiprocessing as mp
-from torch.optim import Adam
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence, \
+                               pad_sequence
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from istarmap import istarmap
-from Env import Env
-from ActionSpace import ActionSpace
-from MCTS import MCTS
-from test import load_test_args, test
-from utils import select_action, set_seeds, copy_nnet, to_input_batch, \
-                  create_nnet, create_nnets, get_train_data, get_valid_data, \
-                  random_batch, sequential_list_batch
+from torch.optim import Adam
+from BaseballDataset import collate_fn
+from test import load_test_args
+from utils import set_seeds, get_train_dataset, get_valid_dataset, create_nnets
 
 
 def load_train_args(parser):
     parser.add_argument('--lr', metavar='F', type=float,
-                        default=1e-6, help='the learning rate')
-    parser.add_argument('--examples_len', metavar='N', type=int,
-                        default=100000,
-                        help='the maximum length of train examples')
-    parser.add_argument('--n_cpus', metavar='N', type=int,
-                        default=16,
-                        help='the number of processors to use')
+                        default=1e-5,
+                        help='the learning rate')
     parser.add_argument('--train_batch_size', metavar='N', type=int,
-                        default=16*20,
-                        help='the number of episodes to simulate for an epoch')
-    parser.add_argument('--update_epochs', metavar='N', type=int,
+                        default=32,
+                        help='the batch size for training')
+    parser.add_argument('--num_epochs', metavar='N', type=int,
+                        default=100,
+                        help='the number of epochs to train')
+    parser.add_argument('--represent_size', metavar='N', type=int,
+                        default=256,
+                        help='the representation size')
+    parser.add_argument('--embedding_size', metavar='N', type=int,
+                        default=256,
+                        help='the embedding size')
+    parser.add_argument('--hidden_size', metavar='N', type=int,
+                        default=256,
+                        help='the hidden size')
+    parser.add_argument('--num_blocks', metavar='N', type=int,
+                        default=5,
+                        help='the number of residual blocks of the nnets')
+    parser.add_argument('--max_seq_len', metavar='N', type=int,
+                        default=100,
+                        help='the maximum number of PAs')
+    parser.add_argument('--state_loss_coef', metavar='F', type=float,
                         default=10,
-                        help='the number of epochs to update the neural net')
-
-    # MCTS arguments
-    parser.add_argument('--num_mcts_sims', metavar='N', type=int,
-                        default=500, help='the number of MCTS simulations')
-    parser.add_argument('--mcts_max_depth', metavar='N', type=int,
-                        default=5, help='the maximum depth of MCTS')
-    parser.add_argument('--cpuct', metavar='N', type=int,
-                        default=1,
-                        help='an MCTS parameter c_puct')
+                        help='the coefficient of state loss')
     return parser
 
 
-def make_an_episode(env, mcts, action_space, nnet, state):
-    examples = []
-    tmp_examples = []
-    curr_scores = [0, 0]
-
-    if env.check_done(state) is not None:
-        return examples
-
-    state = env.reset(state)
-    for _ in range(100):  # max 100 steps
-        policy = mcts.get_policy(state, nnet)
-        action = select_action(policy, state, action_space)
-
-        prev_state = state.copy()
-
-        state, runs_scored, done, _ = env.step(action)
-
-        curr_scores[0] += runs_scored[0]
-        curr_scores[1] += runs_scored[1]
-
-        tmp_examples.append((prev_state, policy, tuple(curr_scores)))
-
-        if done:
-            break
-
-    for example in tmp_examples:
-        future_runs = (curr_scores[0] - example[2][0],
-                       curr_scores[1] - example[2][1])
-        examples.append((example[0], example[1], future_runs))
-
-    return examples
-
-
-def simulate(batch, nnets, action_space, args):
-    with mp.Pool(args.n_cpus) as pool:
-        env = Env(action_space)
-        mcts = MCTS(action_space, args)
-        func = partial(make_an_episode, env, mcts, action_space)
-        states = [{column: batch[column][i] for column in batch}
-                  for i in range(len(batch[list(batch.keys())[0]]))]  # unzip
-        examples_list = list(tqdm(
-            pool.istarmap(func, zip(cycle(nnets), states)),
-            total=len(states)
-        ))
-    return [example for examples in examples_list for example in examples]
-
-
-def update_net(train_examples, nnet, optimizer, policy_loss_fn, value_loss_fn,
-               args, tb, epoch):
-    for _ in tqdm(range(args.update_epochs)):
-        epoch_policy_loss, epoch_value_loss = 0, 0
-
-        for batch in sequential_list_batch(list(train_examples),
-                                           args.train_batch_size):
-            states, policies, values = tuple(map(list, zip(*batch)))
-
-            states = {k: np.array([dic[k] for dic in states])
-                      for k in states[0]}
-            input_batch = to_input_batch(states, torch.device('cuda'))
-
-            target_policies = torch.from_numpy(np.stack(policies)).cuda()
-
-            target_values = tuple(map(lambda x: torch.Tensor(x).cuda(),
-                                      zip(*values)))
-
-            policies, values = nnet(input_batch)
-
-            policies = F.log_softmax(policies, dim=1)
-
-            policy_loss = policy_loss_fn(policies, target_policies)
-            value_loss = value_loss_fn(values[:, 0], target_values[0]) + \
-                value_loss_fn(values[:, 1], target_values[1])
-            loss = policy_loss + value_loss
-
-            epoch_policy_loss += policy_loss.item() * len(policies)
-            epoch_value_loss += value_loss.item() * len(policies)
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-        epoch_policy_loss /= len(train_examples)
-        epoch_value_loss /= len(train_examples)
-
-    tb.add_scalar('train policy loss', epoch_policy_loss, epoch)
-    tb.add_scalar('train value loss', epoch_value_loss, epoch)
-
-    torch.save(nnet.module.state_dict(), 'models/temp.pt')
-    print('Model saved')
+def apply_mask(tensor, lengths, device):
+    mask = pad_sequence(
+        [torch.ones(length) for length in lengths]
+    ).unsqueeze(-1).repeat(
+        1, 1, tensor.shape[-1]
+    ).to(device)
+    return tensor * mask
 
 
 def main():
-    mp.set_start_method('spawn')
-    mpp.Pool.istarmap = istarmap  # for tqdm
-
     parser = argparse.ArgumentParser(description='Training argument parser')
     parser = load_train_args(parser)
     parser = load_test_args(parser)
@@ -150,39 +59,192 @@ def main():
 
     set_seeds(args.seed)
 
-    train_data = get_train_data()
-    valid_data = get_valid_data()
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
 
-    nnet = create_nnet(train_data, args)
-    nnet.module.load_state_dict(torch.load(f'models/{args.load}'))
-    nnets = create_nnets(train_data, args, n_nnets=torch.cuda.device_count())
+    train_dataset = get_train_dataset()
+    valid_dataset = get_valid_dataset()
 
-    optimizer = Adam(nnet.parameters(), lr=args.lr)
-    policy_loss_fn = nn.KLDivLoss(reduction='batchmean')
-    value_loss_fn = nn.MSELoss()
+    train_loader = DataLoader(train_dataset, args.train_batch_size,
+                              shuffle=True, collate_fn=collate_fn)
+    valid_loader = DataLoader(valid_dataset, args.test_batch_size,
+                              shuffle=False, collate_fn=collate_fn)
 
-    action_space = ActionSpace()
+    represent, is_done, predict = create_nnets(train_dataset, args)
+    rnn = nn.GRU(
+        input_size=args.represent_size,
+        hidden_size=args.represent_size,
+        num_layers=1
+    )
 
-    train_examples = deque(maxlen=args.examples_len)
+    represent.to(device)
+    is_done.to(device)
+    predict.to(device)
+    rnn.to(device)
+
+    optimizer = Adam(
+        list(represent.parameters()) +
+        list(is_done.parameters()) +
+        list(predict.parameters()) +
+        list(rnn.parameters()),
+        args.lr
+    )
+
+    cos_loss = nn.CosineEmbeddingLoss()  # state
+    bce_loss = nn.BCELoss()  # done
+    mse_loss = nn.MSELoss()  # score
 
     tb = SummaryWriter()  # tensorboard writer
 
-    epoch = 0
-    while True:
-        for indice in random_batch(len(train_data), args.train_batch_size):
-            epoch += 1
-            print(f'Epoch {epoch}')
+    for epoch in range(1, 1 + args.num_epochs):
+        represent.train()
+        is_done.train()
+        predict.train()
+        rnn.train()
+        sum_state_loss, sum_done_loss, sum_score_loss, sum_loss = 0, 0, 0, 0
 
-            copy_nnet(nnet, nnets)  # nnet -> nnets
+        for features, done_targets, score_targets, lengths in train_loader:
+            batch_size = done_targets.shape[1]
 
-            curr_examples = simulate(train_data[indice], nnets, action_space,
-                                     args)
-            train_examples.extend(curr_examples)
+            for key in features:
+                features[key] = features[key].to(device)
+            done_targets = done_targets.to(device)
+            score_targets = score_targets.to(device)
 
-            update_net(train_examples, nnet, optimizer,
-                       policy_loss_fn, value_loss_fn, args, tb, epoch)
+            states = represent(features)  # (seq_len, batch, represent)
 
-            test(valid_data, nnet, args, tb, epoch)
+            packed_states = pack_padded_sequence(states, lengths,
+                                                 enforce_sorted=False)
+            h_0 = torch.zeros(1, batch_size, states.shape[-1], device=device)
+            next_states, h_n = rnn(packed_states, h_0)  # (seq_len, batch, *)
+            next_states, lengths = pad_packed_sequence(next_states)
+
+            done_preds = is_done(next_states)  # (seq_len, batch, 1)
+
+            score_preds = predict(h_n[-1])  # (batch, 2)
+
+            masked_state_preds = apply_mask(next_states[:-1], lengths - 1,
+                                            device)
+            masked_state_targets = apply_mask(states[1:].detach(), lengths - 1,
+                                              device)
+            masked_done_preds = apply_mask(done_preds, lengths, device)
+            masked_done_targets = apply_mask(done_targets, lengths, device)
+
+            state_loss = cos_loss(masked_state_preds, masked_state_targets,
+                                  torch.tensor(1, device=device))
+            done_loss = bce_loss(masked_done_preds, masked_done_targets)
+            score_loss = mse_loss(score_preds, score_targets)
+            loss = state_loss * args.state_loss_coef + done_loss + score_loss
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            sum_state_loss += state_loss.item() * batch_size
+            sum_done_loss += done_loss.item() * batch_size
+            sum_score_loss += score_loss.item() * batch_size
+            sum_loss += loss.item() * batch_size
+
+        tb.add_scalar('train state loss',
+                      sum_state_loss / len(train_loader.dataset), epoch)
+        tb.add_scalar('train done loss',
+                      sum_done_loss / len(train_loader.dataset), epoch)
+        tb.add_scalar('train score loss',
+                      sum_score_loss / len(train_loader.dataset), epoch)
+        tb.add_scalar('train loss',
+                      sum_loss / len(train_loader.dataset), epoch)
+
+        represent.eval()
+        is_done.eval()
+        predict.eval()
+        rnn.eval()
+        sum_state_loss, sum_done_loss, sum_score_loss, sum_loss = 0, 0, 0, 0
+
+        with torch.no_grad():
+            for features, done_targets, score_targets, lengths in valid_loader:
+                batch_size = done_targets.shape[1]
+
+                for key in features:
+                    features[key] = features[key].to(device)
+                done_targets = done_targets.to(device)
+                score_targets = score_targets.to(device)
+
+                states = represent(features)  # (seq_len, batch, represent)
+
+                packed_states = pack_padded_sequence(states, lengths,
+                                                     enforce_sorted=False)
+                h_0 = torch.zeros(1, batch_size, states.shape[-1],
+                                  device=device)
+                next_states, h_n = rnn(packed_states, h_0)  # (seq, batch, *)
+                next_states, lengths = pad_packed_sequence(next_states)
+
+                done_preds = is_done(next_states)  # (seq_len, batch, 1)
+
+                score_preds = predict(h_n[-1])  # (batch, 2)
+
+                masked_state_preds = apply_mask(next_states[:-1], lengths - 1,
+                                                device)
+                masked_state_targets = apply_mask(states[1:].detach(),
+                                                  lengths - 1, device)
+                masked_done_preds = apply_mask(done_preds, lengths, device)
+                masked_done_targets = apply_mask(done_targets, lengths, device)
+
+                state_loss = cos_loss(masked_state_preds, masked_state_targets,
+                                      torch.tensor(1, device=device))
+                done_loss = bce_loss(masked_done_preds, masked_done_targets)
+                score_loss = mse_loss(score_preds, score_targets)
+                loss = state_loss * args.state_loss_coef + done_loss + \
+                    score_loss
+
+                sum_state_loss += state_loss.item() * batch_size
+                sum_done_loss += done_loss.item() * batch_size
+                sum_score_loss += score_loss.item() * batch_size
+                sum_loss += loss.item() * batch_size
+
+            tb.add_scalar('valid state loss',
+                          sum_state_loss / len(valid_loader.dataset), epoch)
+            tb.add_scalar('valid done loss',
+                          sum_done_loss / len(valid_loader.dataset), epoch)
+            tb.add_scalar('valid score loss',
+                          sum_score_loss / len(valid_loader.dataset), epoch)
+            tb.add_scalar('valid loss',
+                          sum_loss / len(valid_loader.dataset), epoch)
+
+            for features, done_targets, score_targets, lengths in valid_loader:
+                batch_size = done_targets.shape[1]
+
+                first_features = {}
+                for key in features:
+                    first_features[key] = features[key][:1]
+                first_done_targets = done_targets[:1]
+
+                for key in first_features:
+                    first_features[key] = first_features[key].to(device)
+                first_done_targets = first_done_targets.to(device)
+                score_targets = score_targets.to(device)
+
+                state = represent(first_features)  # (1, batch, #features)
+                states = [state]
+                h_n = torch.zeros(1, batch_size, state.shape[-1],
+                                  device=device)
+                for _ in range(args.max_seq_len):
+                    state, h_n = rnn(state, h_n)  # (seq_len, batch, *)
+                    states.append(state)
+
+                # Find first dones
+                done_idx = [0] * batch_size
+                for i, state in enumerate(states[1:], 1):
+                    dones = is_done(state[0])
+                    dones = dones.reshape(-1).tolist()
+                    for j, done in enumerate(dones):
+                        if done_idx[j] == 0 and done > 0.5:
+                            done_idx[j] = i
+
+                print(done_idx)
+
+    tb.close()
 
 
 if __name__ == '__main__':
