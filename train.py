@@ -13,7 +13,7 @@ from utils import set_seeds, get_train_dataset, get_valid_dataset, create_nnets
 
 def load_train_args(parser):
     parser.add_argument('--lr', metavar='F', type=float,
-                        default=1e-5,
+                        default=2e-5,
                         help='the learning rate')
     parser.add_argument('--train_batch_size', metavar='N', type=int,
                         default=32,
@@ -236,7 +236,7 @@ def main():
                 # Find first dones
                 done_idx = [0] * batch_size
                 for i, state in enumerate(states[1:], 1):
-                    dones = is_done(state[0])
+                    dones = is_done(state[0].unsqueeze(0))
                     dones = dones.reshape(-1).tolist()
                     for j, done in enumerate(dones):
                         if done_idx[j] == 0 and done > 0.5:

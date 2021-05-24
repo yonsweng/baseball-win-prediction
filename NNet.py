@@ -7,14 +7,26 @@ class ResBlock(nn.Module):
     def __init__(self, in_features, hidden_features):
         super(ResBlock, self).__init__()
         self.linear1 = nn.Linear(in_features, hidden_features)
-        self.relu = nn.ReLU(inplace=False)
+        self.bn1 = nn.BatchNorm1d(hidden_features)
+        self.relu = nn.ReLU(inplace=True)
         self.linear2 = nn.Linear(hidden_features, in_features)
+        self.bn2 = nn.BatchNorm1d(in_features)
 
     def forward(self, x):
         residual = x
         out = self.linear1(x)
+        out = torch.transpose(out, 0, 1)
+        out = torch.transpose(out, 1, 2)
+        out = self.bn1(out)
+        out = torch.transpose(out, 1, 2)
+        out = torch.transpose(out, 0, 1)
         out = self.relu(out)
         out = self.linear2(out)
+        out = torch.transpose(out, 0, 1)
+        out = torch.transpose(out, 1, 2)
+        out = self.bn2(out)
+        out = torch.transpose(out, 1, 2)
+        out = torch.transpose(out, 0, 1)
         out += residual
         out = self.relu(out)
         return out
@@ -47,7 +59,8 @@ class Represent(nn.Module):
             torch.flatten(self.team_emb(x['team']), start_dim=2)
         ], dim=2)
         x = self.linear1(x)
-        x = F.relu(x, inplace=False)
+        x = F.relu(x, inplace=True)
+        x = self.res_blocks(x)
         x = self.linear2(x)
         return x
 
@@ -64,7 +77,7 @@ class IsDone(nn.Module):
 
     def forward(self, x):
         x = self.linear1(x)
-        x = F.relu(x, inplace=False)
+        x = F.relu(x, inplace=True)
         x = self.res_blocks(x)
         x = self.linear2(x)
         x = torch.sigmoid(x)
@@ -82,8 +95,10 @@ class Predict(nn.Module):
         self.linear2 = nn.Linear(hidden_features, 2)
 
     def forward(self, x):
+        x = x.unsqueeze(0)
         x = self.linear1(x)
-        x = F.relu(x, inplace=False)
+        x = F.relu(x, inplace=True)
         x = self.res_blocks(x)
         x = self.linear2(x)
+        x = x.squeeze(0)
         return x
