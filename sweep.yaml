@@ -1,0 +1,12 @@
+program: train.py
+method: bayes
+metric:
+  name: accuracy
+  goal: maximize
+parameters:
+  lr:
+    min: 0.000001
+    max: 0.00001
+  state_loss_coef:
+    min: 1.0
+    max: 20.0

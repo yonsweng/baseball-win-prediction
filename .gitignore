@@ -6,3 +6,4 @@ runs
 temp*
 data_info.json
 venv
+wandb

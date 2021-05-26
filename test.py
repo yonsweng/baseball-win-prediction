@@ -6,23 +6,18 @@ from torch.utils.tensorboard import SummaryWriter
 from sklearn.metrics import accuracy_score
 from time import time
 from tqdm import tqdm
-from ActionSpace import ActionSpace
-from Env import Env
 from utils import sequential_dataset_batch, to_input_batch, set_seeds, \
-                  get_test_dataset, create_nnet, unzip_batch, zip_batch
+                  get_test_dataset, unzip_batch, zip_batch
 
 
 def load_test_args(parser):
     parser.add_argument('--test_size', metavar='N', type=int, default=100,
                         help='the number of tests')
     parser.add_argument('--test_batch_size', metavar='N', type=int,
-                        default=512,
+                        default=128,
                         help='the batch size for test')
     parser.add_argument('--seed', metavar='N', type=int, default=2021,
                         help='the random seed')
-    parser.add_argument('--n_actions', metavar='N', type=int,
-                        default=len(ActionSpace()),
-                        help='the number of actions')
     parser.add_argument('--n_gpus', metavar='N', type=int,
                         default=torch.cuda.device_count(),
                         help='the number of GPUs to use')
