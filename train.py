@@ -19,7 +19,7 @@ def load_train_args(parser):
                         default=128,
                         help='the batch size for training')
     parser.add_argument('--num_epochs', metavar='N', type=int,
-                        default=100,
+                        default=200,
                         help='the number of epochs to train')
     parser.add_argument('--represent_size', metavar='N', type=int,
                         default=512,

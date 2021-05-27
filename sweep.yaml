@@ -1,12 +1,16 @@
 program: train.py
-method: bayes
+method: grid
 metric:
-  name: accuracy
-  goal: maximize
+  name: final_score_loss
+  goal: minimize
 parameters:
   lr:
-    min: 0.000001
-    max: 0.00001
+    values:
+    - 3e-7
+    - 5e-7
   state_loss_coef:
-    min: 1.0
-    max: 20.0
+    values:
+    - 1.0
+    - 3.0
+    - 10.0
+    - 30.0
