@@ -1,16 +1,12 @@
 program: train.py
 method: grid
 metric:
-  name: final_score_loss
-  goal: minimize
+  name: accuracy
+  goal: maximize
 parameters:
   lr:
     values:
-    - 3e-7
-    - 5e-7
-  state_loss_coef:
-    values:
-    - 1.0
-    - 3.0
-    - 10.0
-    - 30.0
+    - 2e-6
+    - 5e-6
+    - 1e-5
+    - 2e-5

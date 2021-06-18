@@ -153,6 +153,7 @@ def add_end_score_cts(data):
     away_end_score_cts = np.zeros(len(data), dtype=np.uint8)
     home_end_score_cts = np.zeros(len(data), dtype=np.uint8)
 
+    game_new_index = 0
     for index, row in data.iterrows():
         # Initialize
         if row['GAME_NEW_FL'] == 'T':
@@ -170,9 +171,38 @@ def add_end_score_cts(data):
                 home_end_score_ct = row['HOME_SCORE_CT'] + event_runs_ct
             away_end_score_cts[game_new_index:index+1] = away_end_score_ct
             home_end_score_cts[game_new_index:index+1] = home_end_score_ct
+            game_new_index = index + 1
 
     data['AWAY_END_SCORE_CT'] = away_end_score_cts
     data['HOME_END_SCORE_CT'] = home_end_score_cts
+    return data
+
+
+def add_end_inns(data):
+    away_bat_inns = np.zeros(len(data), dtype=np.uint8)
+    home_bat_inns = np.zeros(len(data), dtype=np.uint8)
+
+    game_new_index = 0
+    for index, row in data.iterrows():
+        # Initialize
+        if row['GAME_NEW_FL'] == 'T':
+            game_new_index = index
+
+        # AWAY_BAT_INN, HOME_BAT_INN
+        if row['GAME_END_FL'] == 'T':
+            if row['BAT_HOME_ID'] == 0:
+                away_bat_inn = row['INN_CT']
+                home_bat_inn = row['INN_CT'] - 1
+            else:
+                away_bat_inn = row['INN_CT']
+                home_bat_inn = row['INN_CT']
+            away_bat_inns[game_new_index:index+1] = away_bat_inn
+            home_bat_inns[game_new_index:index+1] = home_bat_inn
+            game_new_index = index + 1
+
+    data['AWAY_BAT_INN'] = away_bat_inns
+    data['HOME_BAT_INN'] = home_bat_inns
+
     return data
 
 
@@ -199,11 +229,14 @@ def preprocess(data):
         'AWAY_BAT_LINEUP_ID',
         'HOME_BAT_LINEUP_ID',
         'AWAY_END_SCORE_CT',
-        'HOME_END_SCORE_CT'
+        'HOME_END_SCORE_CT',
+        'EVENT_CD',
+        'AWAY_BAT_INN',
+        'HOME_BAT_INN'
     ] + [f'AWAY_BAT{i}_ID' for i in range(1, 10)] \
       + [f'HOME_BAT{i}_ID' for i in range(1, 10)]
 
-    data = leave_only_bat_events(data)
+    # data = leave_only_bat_events(data)
     data = encode_teams(data)
     data = encode_batters(data)
     data = encode_pitchers(data)
@@ -211,6 +244,7 @@ def preprocess(data):
     data = add_pit_ids(data)
     data = add_bat_lineup_ids(data)
     data = add_end_score_cts(data)
+    data = add_end_inns(data)
     return data[used_columns]
 
 
@@ -225,7 +259,8 @@ def save_data_info(data):
             .fillna('').values.reshape(-1))),
         'n_pitchers': len(np.unique(data['PIT_ID'])),
         'n_teams': len(np.unique(
-            data[['AWAY_TEAM_ID', 'HOME_TEAM_ID']].values.reshape(-1)))
+            data[['AWAY_TEAM_ID', 'HOME_TEAM_ID']].values.reshape(-1))),
+        'events': list(map(int, np.unique(data['EVENT_CD'].values)))
     }
 
     with open('data_info.json', 'w') as f:

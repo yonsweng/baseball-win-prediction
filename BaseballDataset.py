@@ -3,6 +3,34 @@ from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
 
+class PlateDataset(Dataset):
+    def __init__(self, data, event_to_index):
+        super().__init__()
+        self.data = data
+        self.event_to_index = event_to_index
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        row = self.data.iloc[index]
+
+        if row['BAT_HOME_ID'] == 0:  # away team batting
+            bat_id = row['AWAY_BAT1_ID']
+            pit_id = row['HOME_PIT_ID']
+            team_id = row['HOME_TEAM_ID']
+        else:  # home team batting
+            bat_id = row['HOME_BAT1_ID']
+            pit_id = row['AWAY_PIT_ID']
+            team_id = row['AWAY_TEAM_ID']
+
+        return torch.tensor([bat_id, pit_id, team_id], dtype=torch.long), \
+            torch.tensor(
+                self.event_to_index[row['EVENT_CD']],
+                dtype=torch.long
+            )
+
+
 class BaseballDataset(Dataset):
     def __init__(self, data):
         # Split data by games
@@ -28,9 +56,9 @@ class BaseballDataset(Dataset):
                 game['HOME_SCORE_CT'].values / 10
             ], dtype=torch.float).transpose(0, 1),
             'bat': torch.tensor([
-                game['BASE1_RUN_ID'].values,
-                game['BASE2_RUN_ID'].values,
-                game['BASE3_RUN_ID'].values,
+                # game['BASE1_RUN_ID'].values,
+                # game['BASE2_RUN_ID'].values,
+                # game['BASE3_RUN_ID'].values,
                 *[game[f'AWAY_BAT{i}_ID'].values for i in range(1, 10)],
                 *[game[f'HOME_BAT{i}_ID'].values for i in range(1, 10)]
             ], dtype=torch.long).transpose(0, 1),
@@ -46,7 +74,9 @@ class BaseballDataset(Dataset):
 
         targets = torch.tensor([
             game['AWAY_END_SCORE_CT'].values[-1],
-            game['HOME_END_SCORE_CT'].values[-1]
+            game['HOME_END_SCORE_CT'].values[-1],
+            game['AWAY_BAT_INN'].values[-1],
+            game['HOME_BAT_INN'].values[-1]
         ], dtype=torch.float)  # (2, )
 
         return features, targets
@@ -74,6 +104,8 @@ def collate_fn(data):
         done_batch[len(seq['float'])-1, i] = 1.
 
     # Make score_batch
-    score_batch = torch.stack(score_targets)  # (BATCH_SIZE, 2)
+    targets = torch.stack(score_targets)
+    score_batch = targets[:, :2]  # (BATCH_SIZE, 2)
+    inns = targets[:, 2:]
 
-    return feature_batch, done_batch, score_batch, lengths
+    return feature_batch, done_batch, score_batch, lengths, inns
