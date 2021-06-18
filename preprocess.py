@@ -1,7 +1,7 @@
 import json
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, KFold
 from sklearn.preprocessing import OrdinalEncoder
 
 
@@ -268,17 +268,29 @@ def save_data_info(data):
 
 
 def split_by_game(data):
-    unique_game_ids = data['GAME_ID'].unique()
+    '''
+    Return:
+        [(t1, v1), ..., (tn, vn)], test
+    '''
 
-    train_game_ids, test_game_ids = \
-        train_test_split(unique_game_ids, test_size=0.15)
-    train_game_ids, valid_game_ids = \
-        train_test_split(train_game_ids, test_size=0.15)
+    non_test_game_ids, test_game_ids = \
+        train_test_split(data['GAME_ID'].unique(), test_size=0.15)
 
-    train_data = data[data['GAME_ID'].isin(train_game_ids)]
-    valid_data = data[data['GAME_ID'].isin(valid_game_ids)]
     test_data = data[data['GAME_ID'].isin(test_game_ids)]
-    return train_data, valid_data, test_data
+
+    # 5-fold cross validation
+    non_test_data = []
+    kf = KFold(n_splits=5)
+    for train_indice, valid_indice in kf.split(non_test_game_ids):
+        train_game_ids = [non_test_game_ids[idx] for idx in train_indice]
+        valid_game_ids = [non_test_game_ids[idx] for idx in valid_indice]
+
+        train_data = data[data['GAME_ID'].isin(train_game_ids)]
+        valid_data = data[data['GAME_ID'].isin(valid_game_ids)]
+
+        non_test_data.append((train_data, valid_data))
+
+    return non_test_data, test_data
 
 
 def drop_rows(data):
@@ -286,10 +298,10 @@ def drop_rows(data):
 
 
 def split_data(data):
-    train_data, valid_data, test_data = split_by_game(data)
+    non_test_data, test_data = split_by_game(data)
     # valid_data = drop_rows(valid_data)
     test_data = drop_rows(test_data)
-    return train_data, valid_data, test_data
+    return non_test_data, test_data
 
 
 def drop_cols(data):
@@ -305,16 +317,23 @@ def main():
 
     data = preprocess(data)
 
-    train_data, valid_data, test_data = split_data(data)
+    non_test_data, test_data = split_data(data)
 
-    train_data = drop_cols(train_data)
-    valid_data = drop_cols(valid_data)
+    for i, (train_data, valid_data) in enumerate(non_test_data):
+        train_data = drop_cols(train_data)
+        valid_data = drop_cols(valid_data)
+
+        train_data.to_csv(
+            f'input/mlbplaybyplay2010s_preprocessed/all2010_train_{i}.csv',
+            index=False
+        )
+        valid_data.to_csv(
+            f'input/mlbplaybyplay2010s_preprocessed/all2010_valid_{i}.csv',
+            index=False
+        )
+
     test_data = drop_cols(test_data)
 
-    train_data.to_csv(
-        'input/mlbplaybyplay2010s_preprocessed/all2010_train.csv', index=False)
-    valid_data.to_csv(
-        'input/mlbplaybyplay2010s_preprocessed/all2010_valid.csv', index=False)
     test_data.to_csv(
         'input/mlbplaybyplay2010s_preprocessed/all2010_test.csv', index=False)
 

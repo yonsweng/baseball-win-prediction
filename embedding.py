@@ -45,6 +45,8 @@ def load_train_args(parser):
                         help='the number of linear layers')
     parser.add_argument('--seed', metavar='N', type=int, default=2021,
                         help='the random seed')
+    parser.add_argument('--fold', metavar='N', type=int,
+                        help='the fold number')
     return parser
 
 
@@ -64,11 +66,11 @@ def main():
         device = torch.device('cpu')
 
     train_data = pd.read_csv(
-        'input/mlbplaybyplay2010s_preprocessed/all2010_train.csv',
+        f'input/mlbplaybyplay2010s_preprocessed/all2010_train_{args.fold}.csv',
         low_memory=False
     )
     valid_data = pd.read_csv(
-        'input/mlbplaybyplay2010s_preprocessed/all2010_valid.csv',
+        f'input/mlbplaybyplay2010s_preprocessed/all2010_valid_{args.fold}.csv',
         low_memory=False
     )
 
@@ -114,8 +116,7 @@ def main():
         max_lr=[args.emb_lr, args.lr],
         epochs=args.num_epochs,
         steps_per_epoch=(len(train_dataset)+args.train_batch_size-1
-                         )//args.train_batch_size,
-
+                         )//args.train_batch_size
     )
 
     loss_fn = nn.CrossEntropyLoss()  # score
@@ -187,7 +188,7 @@ def main():
         # model save
         if top_accuracy > best_accuracy:
             best_accuracy = top_accuracy
-            torch.save(model.state_dict(), 'models/embedding.pt')
+            torch.save(model.state_dict(), f'models/embedding_{args.fold}.pt')
 
         if epoch == args.freeze_epochs:
             unfreeze([model.linear_in, model.linears, model.linear_out])

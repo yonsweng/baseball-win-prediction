@@ -13,9 +13,9 @@ def set_seeds(seed):
     np.random.seed(seed)
 
 
-def get_train_dataset():
+def get_train_dataset(fold):
     data = pd.read_csv(
-        'input/mlbplaybyplay2010s_preprocessed/all2010_train.csv',
+        f'input/mlbplaybyplay2010s_preprocessed/all2010_train_{fold}.csv',
         low_memory=False)
     return BaseballDataset(data)
 
@@ -28,9 +28,9 @@ def get_train_new_dataset():
     return BaseballDataset(data)
 
 
-def get_valid_dataset():
+def get_valid_dataset(fold):
     data = pd.read_csv(
-        'input/mlbplaybyplay2010s_preprocessed/all2010_valid.csv',
+        f'input/mlbplaybyplay2010s_preprocessed/all2010_valid_{fold}.csv',
         low_memory=False)
     return BaseballDataset(data)
 
